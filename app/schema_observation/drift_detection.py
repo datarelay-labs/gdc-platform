@@ -86,11 +86,32 @@ def _is_primitive_type_change(baseline_type: str | None, current_type: str | Non
     return True
 
 
-def maybe_establish_baseline(row: StreamObservedSchema, observed_paths: dict[str, dict[str, Any]]) -> bool:
-    """Copy observed paths into baseline once minimum observation volume is met."""
+def maybe_establish_baseline(
+    row: StreamObservedSchema,
+    observed_paths: dict[str, dict[str, Any]],
+    *,
+    union_schema: Any | None = None,
+) -> bool:
+    """Establish baseline from Union Schema when available; else from observed volume.
+
+    Prefer confirmed Union Schema (Sample → Deploy) over runtime volume so the
+    Stream baseline matches the operator-reviewed schema. Volume-based copy remains
+    the fallback for streams without a persisted Union Schema.
+    """
 
     if row.baseline_paths_json is not None:
         return False
+
+    if union_schema is not None:
+        from app.schema_observation.union_schema_baseline import paths_from_union_schema
+
+        union_paths = paths_from_union_schema(union_schema)
+        if union_paths:
+            now = datetime.now(timezone.utc)
+            row.baseline_paths_json = _serialize_baseline(union_paths)
+            row.baseline_established_at = now
+            return True
+
     if int(row.observation_run_count or 0) < _baseline_min_runs():
         return False
     if int(row.total_events_observed or 0) < _baseline_min_events():

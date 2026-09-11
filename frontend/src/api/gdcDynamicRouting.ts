@@ -11,7 +11,9 @@ export type DynamicRoute = {
   stream_id: number
   name: string
   enabled: boolean
-  condition_json: { sensitivity_class: string }
+  condition_json: { sensitivity_class?: string; classification_level?: string }
+  route_id: number | null
+  route_name: string | null
   destination_id: number
   destination_name: string | null
   created_at: string
@@ -58,8 +60,9 @@ export async function createDynamicRoute(
   body: {
     name: string
     enabled?: boolean
-    condition_json: { sensitivity_class: string }
-    destination_id: number
+    condition_json: { sensitivity_class?: string; classification_level?: string }
+    route_id?: number
+    destination_id?: number
   },
 ): Promise<{ route: DynamicRoute } | null> {
   return requestJson(`${RT}/streams/${streamId}/dynamic-routes`, {
@@ -72,7 +75,13 @@ export async function createDynamicRoute(
 export async function patchDynamicRoute(
   streamId: number,
   routeId: number,
-  body: { name?: string; enabled?: boolean; condition_json?: { sensitivity_class: string } },
+  body: {
+    name?: string
+    enabled?: boolean
+    condition_json?: { sensitivity_class?: string; classification_level?: string }
+    route_id?: number
+    destination_id?: number
+  },
 ): Promise<{ route: DynamicRoute } | null> {
   return requestJson(`${RT}/streams/${streamId}/dynamic-routes/${routeId}`, {
     method: 'PATCH',

@@ -216,7 +216,9 @@ describe('StepDeploy', () => {
     expect(await screen.findByTestId('deploy-route-override-list')).toBeInTheDocument()
     expect(await screen.findByTestId('deploy-route-override-Stellar Cyber')).toBeInTheDocument()
     expect(screen.getByTestId('deploy-route-override-r2-transform')).toHaveTextContent('Transform — Override')
-    expect(screen.getByTestId('deploy-route-override-r2-transform')).toHaveTextContent('Intent only')
+    expect(screen.getByTestId('deploy-route-override-r2-transform')).toHaveTextContent(
+      'Persisted through route transform',
+    )
     expect(screen.getByTestId('deploy-shared-processing-summary')).toBeInTheDocument()
     expect(screen.getByTestId('deploy-shared-processing-applied-count')).toHaveTextContent('3 Routes')
   })
@@ -234,8 +236,7 @@ describe('StepDeploy', () => {
     await waitFor(() => {
       expect(screen.getByTestId('deploy-route-health-status-r2')).toHaveTextContent('Ready')
     })
-    expect(screen.getByTestId('deploy-route-intent-gaps-r2')).toHaveTextContent('Transform')
-    expect(screen.getByTestId('deploy-route-intent-gaps-r2')).toHaveTextContent('Intent only')
+    expect(screen.queryByTestId('deploy-route-intent-gaps-r2')).not.toBeInTheDocument()
   })
 
   it('shows split projected counts for override and mixed', async () => {

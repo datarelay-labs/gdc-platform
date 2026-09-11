@@ -1,10 +1,7 @@
 import { evaluateUnionFieldSuggestion } from './evaluateUnionFieldSuggestion'
+import type { UnionSchemaField } from './unionSchema'
 
-/** Union Schema Field Detail Panel — Likely * suggested type labels. */
-export function suggestUnionFieldTypeLabel(
-  fieldPath: string,
-  sampleValues?: readonly unknown[],
-  fieldType?: string,
-): string {
-  return evaluateUnionFieldSuggestion(fieldPath, fieldType, sampleValues).suggestedType ?? '—'
+/** Union Schema Field Detail Panel — backend suggested type labels. */
+export function suggestUnionFieldTypeLabel(field: UnionSchemaField | null | undefined): string {
+  return evaluateUnionFieldSuggestion(field).suggestedType ?? '—'
 }

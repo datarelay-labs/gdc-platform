@@ -40,6 +40,7 @@ from app.runtime.schemas import FinalEventDraftPreviewRequest
 from tests.test_stream_runner_e2e import (
     _FakePoller,
     _FakeWebhookSender,
+    _add_enabled_route_for_destination,
     _build_runner,
     _seed_stream_runtime,
 )
@@ -89,6 +90,7 @@ def _dynamic_test_app() -> FastAPI:
                 enabled=body.enabled,
                 condition_json=body.condition_json.model_dump(),
                 destination_id=body.destination_id,
+                route_id=body.route_id,
             )
             db.commit()
         except DynamicRouteValidationError as exc:
@@ -114,6 +116,7 @@ def _dynamic_test_app() -> FastAPI:
                 enabled=body.enabled,
                 condition_json=body.condition_json.model_dump() if body.condition_json is not None else None,
                 destination_id=body.destination_id,
+                target_route_id=body.route_id,
             )
             db.commit()
         except DynamicRouteValidationError as exc:
@@ -150,7 +153,7 @@ def _add_security_destination(db: Session, stream_id: int) -> Destination:
     )
     db.add(dest)
     db.flush()
-    _ = stream_id
+    _add_enabled_route_for_destination(db, stream_id, int(dest.id))
     return dest
 
 
@@ -172,6 +175,7 @@ def test_create_dynamic_route(db_session: Session, dynamic_api_client: TestClien
     body = resp.json()
     assert body["route"]["name"] == "Secret Security Fan-out"
     assert body["route"]["destination_id"] == security.id
+    assert body["route"]["route_id"] is not None
 
 
 def test_route_match_and_no_match(db_session: Session) -> None:
@@ -325,7 +329,16 @@ def test_runtime_dynamic_routing_additive_fan_out(
         .filter(DeliveryLog.stream_id == stream_id, DeliveryLog.stage == "dynamic_route_send_success")
         .all()
     )
-    assert success_dyn
+    assert not success_dyn
+    skip_dyn = (
+        db_session.query(DeliveryLog)
+        .filter(DeliveryLog.stream_id == stream_id, DeliveryLog.stage == "dynamic_route_send_skip")
+        .all()
+    )
+    assert any(
+        (row.payload_sample or {}).get("skip_reason") == "duplicate_base_route"
+        for row in skip_dyn
+    )
 
 
 def test_observability_summary(db_session: Session) -> None:

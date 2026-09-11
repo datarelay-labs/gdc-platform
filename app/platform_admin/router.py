@@ -212,7 +212,7 @@ def _alert_read(row: object) -> AlertSettingsRead:
     notification_delivery = {
         "webhook": "implemented",
         "slack": "planned",
-        "email": "planned",
+        "email": "implemented",
     }
     return AlertSettingsRead(
         rules=rules,

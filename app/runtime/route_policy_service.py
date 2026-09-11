@@ -40,6 +40,8 @@ def build_route_policy_effective(
     persisted = config.resolution.persisted_source
     api_persisted: str = "stream" if persisted in ("stream", "empty") else "route"
     fallback_used = bool(config.resolution.fallback_used)
+    rule_sources = {str(rule.source) for rule in config.rules}
+    has_partial_overlay = "route" in rule_sources and "stream" in rule_sources
 
     processing_status = compute_route_processing_status(
         persisted_source=persisted,
@@ -47,7 +49,8 @@ def build_route_policy_effective(
         has_governance_override=has_policy_governance_override_for_route(
             route_overrides,
             route_id=route_id,
-        ),
+        )
+        or has_partial_overlay,
     )
 
     return RoutePolicyEffectiveResponse(

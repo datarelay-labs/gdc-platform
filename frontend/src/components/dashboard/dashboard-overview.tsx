@@ -10,22 +10,26 @@ import {
   deriveOperationalProblems,
   deriveOverallHealthBeacon,
   deriveOverallHealthFromSnapshot,
+  derivePrimaryOperationalIssueStrip,
+  derivePrimaryTrafficKpisFromSnapshot,
   deriveRecentAlertsSummary,
   deriveStreamGroupHealthFromSnapshot,
   deriveStreamHealthMatrix,
   deriveSystemHealthFromSnapshot,
-  deriveSystemHealthSummaryStrip,
   deriveTopSourcesByIngestRate,
   deriveTrafficChartSeries,
   SNAPSHOT_KPI_BASIS_LABEL,
 } from './dashboard-charter-metrics'
 import {
+  DashboardGroupKpiStrip,
+  DashboardGroupSummaryPanel,
   DashboardKpiStrip,
   DashboardRunningBadge,
   DataModeBadge,
   EventsOverTimeChart,
   OperationalProblemsList,
   OverallHealthBeaconCard,
+  OverallHealthHero,
   RecentAlertsPanel,
   StreamHealthMatrix,
   SystemHealthBar,
@@ -110,6 +114,10 @@ export function DashboardOverview() {
     () => deriveRecentAlertsSummary(bundle?.alerts?.items ?? []),
     [bundle?.alerts?.items],
   )
+  const primaryTrafficKpis = useMemo(
+    () => derivePrimaryTrafficKpisFromSnapshot(bundle?.operationalSnapshot ?? null),
+    [bundle?.operationalSnapshot],
+  )
   const kpiItems = useMemo(
     () =>
       deriveDashboardKpisFromSnapshot({
@@ -121,6 +129,10 @@ export function DashboardOverview() {
         alertsItems: bundle?.alerts?.items ?? [],
       }),
     [bundle?.operationalSnapshot, alertsSummary, bundle?.alertsFailed, bundle?.outcomeTs, windowLabel, bundle?.alerts?.items],
+  )
+  const secondaryKpis = useMemo(
+    () => kpiItems.filter((k) => k.id === 'active-streams' || k.id === 'delivery-gap' || k.id === 'active-alerts'),
+    [kpiItems],
   )
   const topSources = useMemo(
     () =>
@@ -140,8 +152,8 @@ export function DashboardOverview() {
     () => deriveOverallHealthBeacon(bundle?.operationalSnapshot ?? null, alertsSummary),
     [bundle?.operationalSnapshot, alertsSummary],
   )
-  const systemHealthSummary = useMemo(
-    () => deriveSystemHealthSummaryStrip(bundle?.operationalSnapshot ?? null, bundle?.dashboard ?? null),
+  const primaryOperationalIssues = useMemo(
+    () => derivePrimaryOperationalIssueStrip(bundle?.operationalSnapshot ?? null, bundle?.dashboard ?? null),
     [bundle?.operationalSnapshot, bundle?.dashboard],
   )
   const streamHealthMatrix = useMemo(
@@ -291,27 +303,46 @@ export function DashboardOverview() {
       ) : (
         <div className={cn('space-y-3', initialLoading && 'opacity-80')}>
 
-          {/* ── Row 1: Overall Health Beacon + System Health Summary ── */}
+          {/* ── Primary: Overall Health (Healthy / Warning / Critical) ── */}
+          <OverallHealthHero health={overallHealth} basisLabel={SNAPSHOT_KPI_BASIS_LABEL} />
+
+          {/* ── Primary: posture beacon + operational issue counts ── */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch">
             <div className="lg:w-[220px] lg:shrink-0">
               <OverallHealthBeaconCard beacon={overallHealthBeacon} onFocusAlerts={scrollToAlerts} />
             </div>
             <div className="flex-1">
-              <SystemHealthSummaryStrip items={systemHealthSummary} />
+              <SystemHealthSummaryStrip items={primaryOperationalIssues} />
             </div>
           </div>
 
-          {/* ── Row 2: 6 KPI Cards ── */}
-          <DashboardKpiStrip items={kpiItems} onFocusAlerts={scrollToAlerts} />
+          {/* ── Primary: Incoming / Outgoing / Delivery Success ── */}
+          <DashboardKpiStrip items={primaryTrafficKpis} columns={3} onFocusAlerts={scrollToAlerts} />
 
-          {/* ── Row 3: Operational Issues | Stream Health Matrix | Top Sources ── */}
+          {/* ── Stream groups (Source Product) — drill-down to Streams ── */}
+          <DashboardGroupKpiStrip groupHealth={groupHealth} />
+          <DashboardGroupSummaryPanel groupHealth={groupHealth} />
+
+          {/* ── Issue details (demoted) + supporting context ── */}
           <div className="grid gap-3 lg:grid-cols-12">
-            <OperationalProblemsList problems={operationalProblems} className="lg:col-span-3" />
-            <StreamHealthMatrix matrix={streamHealthMatrix} className="lg:col-span-5" />
-            <TopSourcesByIngestRatePanel sources={topSources} className="lg:col-span-4" />
+            <OperationalProblemsList problems={operationalProblems} className="lg:col-span-4" />
+            <TopSourcesByIngestRatePanel sources={topSources} className="lg:col-span-8" />
           </div>
 
-          {/* ── Row 4: Events Over Time | Recent Alerts ── */}
+          {/* ── Secondary: supporting stream/route KPIs (not primary traffic) ── */}
+          {secondaryKpis.length > 0 ? (
+            <DashboardKpiStrip
+              items={secondaryKpis}
+              columns={3}
+              onFocusAlerts={scrollToAlerts}
+              testId="dashboard-secondary-kpi-strip"
+            />
+          ) : null}
+
+          {/* ── Secondary: Stream Health Matrix ── */}
+          <StreamHealthMatrix matrix={streamHealthMatrix} />
+
+          {/* ── Secondary: Events Over Time | Recent Alerts ── */}
           <div className="grid gap-3 lg:grid-cols-12">
             <EventsOverTimeChart series={trafficSeries} windowLabel={windowLongLabel} loading={initialLoading} className="lg:col-span-7" />
             <div className="lg:col-span-5" ref={(el) => { recentAlertsRef.current = el }}>
@@ -323,7 +354,7 @@ export function DashboardOverview() {
             </div>
           </div>
 
-          {/* ── Bottom: System Health Pill Row ── */}
+          {/* ── Bottom: System Health Pill Row (includes checkpoint demoted from primary) ── */}
           <SystemHealthBar items={systemHealth} />
         </div>
       )}

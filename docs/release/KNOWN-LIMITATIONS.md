@@ -22,30 +22,35 @@
 
 The Stream Wizard **Route Processing** step lets operators set **Inherit Global** or **Override** per route for Transform, Protection, Classification, and Policy.
 
-At deploy time, the wizard projects a **Deploy Intent** status:
+At deploy time, the wizard projects a **Deploy Intent** persist kind:
 
 | Persist kind | Meaning |
 |--------------|---------|
 | **none** | Shared processing only — inherited |
-| **governance** | Field-level override persisted via governance API |
-| **intent_only** | Configured in wizard but **not saved to DB** at deploy |
+| **governance** | Field-level or policy override persisted via governance API |
+| **route_transform** | Route mapping/enrichment bundle persisted at deploy |
+| **route_protection** | Route protection intents persisted at deploy |
+| **intent_only** | Shown in Deploy but **not saved** for that concern (incomplete override) |
 
-### What is affected
+### What is persisted at deploy
 
-Route **bundles** where `inherit.<concern> = false` with full route-scoped editor content deploy as **Intent only** for Transform, Protection (bundle), Classification (bundle), and Policy (bundle).
+- Shared stream processing (mapping, enrichment, data protection intents)
+- Complete Transform override (`inherit.transform = false`) → `route_transform`
+- Complete Protection override with ready non-audit intents → `route_protection`
+- Policy override and field-level governance (protection action, classification floor, delivery behavior) → `governance`
+- Route delivery metadata (enabled, failure policy, formatter)
 
-### What is NOT affected
+### Remaining Intent only cases
 
-- Shared stream processing (mapping, enrichment, data protection intents) — **persisted**
-- Governance **field-level** overrides (protection action, classification floor, delivery behavior) — **persisted**
-- Route delivery metadata (enabled, failure policy, formatter) — **persisted**
-- Post-deploy **Route Edit** — full persist via existing APIs
+- Classification override without a floor override row
+- Protection override without ready non-audit intents
+- Incomplete concern payload
 
 ### What you should do
 
-1. After deploy, open **Routes → Edit** for each route with Intent only overrides.
-2. Save route bundles explicitly.
-3. Verify **Effective Status** shows **Overridden** (not Inherited).
+1. Prefer complete override payloads in Wizard Route Processing so persist kind is not Intent only.
+2. If Deploy still shows Intent only, open the stream/route editor after deploy and save the bundle.
+3. Verify **Effective Status** shows **Overridden** (not Inherited) when an override was intended.
 
 **Reference:** [`route-processing-persist-roadmap.md`](../architecture/route-processing-persist-roadmap.md)
 
@@ -125,34 +130,33 @@ MySQL/MariaDB adapters may exist for dev validation lab but are **not** producti
 
 ---
 
-## GDC_ROUTE_PROCESSING_ENABLED (Experimental)
+## GDC_ROUTE_PROCESSING_ENABLED
 
 ### Default
 
 ```python
-GDC_ROUTE_PROCESSING_ENABLED: bool = False  # app/config.py
+GDC_ROUTE_PROCESSING_ENABLED: bool = True  # app/config.py
 ```
 
-### When false (OSS v1.0 GA recommended)
+### When true (product default)
+
+- Per-route pipeline: Transform → Protection → Classification → Policy → Delivery
+- Shared StreamRunner delivery primitive (adapter send, failure policy, Failover, Replay recording)
+- Stream checkpoint after successful / absorbed delivery
+- OSS install / docker-compose inherit this default when the env var is unset
+
+### When false (rollback / compatibility)
 
 - Stream-scoped mapping, enrichment, protection, classification, policy
-- Legacy multi-route fan-out delivery
-- Failover and Replay on delivery path
-- Production-proven path
-
-### When true (experimental)
-
-- Per-route processing pipeline loop
-- Stream-level pre-route governance batch skipped
-- Failover and Replay **not** connected on per-route delivery
-- Intended for evaluation and v1.x graduation — **not GA-recommended**
+- Legacy multi-route fan-out using the same `_send_route_events` primitive
+- Same Failover engine and Replay recording semantics
 
 ### What you should do
 
-- Leave default **false** in production unless explicitly testing per-route pipeline.
-- Persist route bundles via Route Edit regardless of flag — data is durable either way.
+- Leave default **true** unless rolling back to the legacy stream-scoped path.
+- Set `GDC_ROUTE_PROCESSING_ENABLED=false` only for compatibility investigation.
 
-**Reference:** [`OSS-v1-RC-RELEASE-NOTES.md`](./OSS-v1-RC-RELEASE-NOTES.md)
+**Reference:** [`OSS-v1-ARCHITECTURE.md`](../architecture/OSS-v1-ARCHITECTURE.md)
 
 ---
 
@@ -162,10 +166,9 @@ GDC_ROUTE_PROCESSING_ENABLED: bool = False  # app/config.py
 |------------|--------|
 | **Governance Workspace** | Read-only MVP — no inline edit or approval from Workspace |
 | **Regex replace** | Not in Advanced Transform MVP — `regex_extract` only in Expert mode |
-| **Dashboard schema drift count** | Operational Issues row always shows 0 — count not wired to API |
-| **SMTP email notifications** | `SMTP_ENABLED=false` until real SMTP backend configured |
-| **AI Gateway** | Out of OSS v1 scope — routes guarded in OSS build |
-| **Wizard onboarding** | Connector created outside wizard; Destinations before Transform in step order |
+| **SMTP default off** | Delivery is implemented (`SmtpEmailSender`); default `SMTP_ENABLED=false` skips send. Slack remains planned. |
+| **AI Gateway** | Not Data Relay OSS product scope — operator UI and AI-specific APIs are not mounted |
+| **Wizard onboarding** | Connector is created outside the Stream Wizard (wizard selects an existing connector) |
 | **Main bundle size** | ~991 KB entry + async chunks — first load on slow networks may be noticeable |
 
 ---
@@ -179,6 +182,8 @@ GDC_ROUTE_PROCESSING_ENABLED: bool = False  # app/config.py
 - Protection, classification, policy, quarantine, replay (with rules configured)
 - RBAC and audit trail
 - Dashboard operational monitoring and Streams problem-first UX
+- Dashboard / Governance Schema Drift fleet count (confirmed open `StreamSchemaFieldDrift` via Runtime Snapshot)
+- Operational SMTP email delivery (existing NotificationService / dispatcher → `SmtpEmailSender`) when `SMTP_ENABLED=true` and `SMTP_HOST` is set; disabled SMTP does not send and does not fail Stream/runtime/approval; SMTP failure records notification FAILED only
 - Route Edit full persist for all processing concerns
 
 ---

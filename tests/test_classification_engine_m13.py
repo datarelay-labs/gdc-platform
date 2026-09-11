@@ -56,6 +56,7 @@ from app.sensitive_detection.models import (
 from tests.test_stream_runner_e2e import (
     _FakePoller,
     _FakeWebhookSender,
+    _add_enabled_route_for_destination,
     _build_runner,
     _seed_stream_runtime,
 )
@@ -282,6 +283,7 @@ def test_dynamic_routing_classification_matching(db_session: Session) -> None:
     )
     db_session.add(dest)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(dest.id))
     create_dynamic_route(
         db_session,
         stream_id=stream_id,

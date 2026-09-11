@@ -1,7 +1,10 @@
 # Data Relay OSS v1 RC — Release Notes
 
-**Release candidate:** OSS v1 RC  
-**Validation commit:** `7623d94` — Fix frontend tests for Governance sidebar IA and route effective mocks.  
+**Status:** HISTORICAL RC SNAPSHOT (2026-06-19) — do not treat flag defaults below as current product truth.
+**Current default:** `GDC_ROUTE_PROCESSING_ENABLED=true` (rollback `false`). SMTP operational email delivery is implemented (`SmtpEmailSender`; default `SMTP_ENABLED=false` skips send). Slack remains planned. See [`KNOWN-LIMITATIONS.md`](./KNOWN-LIMITATIONS.md) and [`source-of-truth-index.md`](../architecture/source-of-truth-index.md).
+
+**Release candidate:** OSS v1 RC
+**Validation commit:** `7623d94` — Fix frontend tests for Governance sidebar IA and route effective mocks.
 **Date:** 2026-06-19
 
 ---

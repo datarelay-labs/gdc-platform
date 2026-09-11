@@ -1,10 +1,15 @@
-import { CheckCircle2, ShieldCheck, Wand2 } from 'lucide-react'
+import { CheckCircle2, Scale, ShieldCheck, Tags, Wand2 } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '../../../lib/utils'
 import type { WizardDataProtectionState, WizardState } from '../wizard/wizard-state'
-import { globalProtectionConfigured, globalTransformConfigured } from '../wizard/wizard-state'
+import {
+  globalClassificationConfigured,
+  globalPolicyConfigured,
+  globalProtectionConfigured,
+  globalTransformConfigured,
+} from '../wizard/wizard-state'
 
-export type SharedProcessingTab = 'transform' | 'data_protection'
+export type SharedProcessingTab = 'transform' | 'data_protection' | 'classification' | 'policy'
 
 type SharedCard = {
   key: SharedProcessingTab
@@ -17,16 +22,26 @@ type SharedCard = {
 const SHARED_TAB_DEFS: ReadonlyArray<{ key: SharedProcessingTab; label: string }> = [
   { key: 'transform', label: 'Transform' },
   { key: 'data_protection', label: 'Data Protection' },
+  { key: 'classification', label: 'Classification' },
+  { key: 'policy', label: 'Policy' },
 ]
 
 function buildSharedCards(
   state: Pick<
     WizardState,
-    'mapping' | 'transformRules' | 'mappingMode' | 'fullEventJsonataExpression' | 'fullEventRegexConfigJson' | 'dataProtection'
+    | 'mapping'
+    | 'transformRules'
+    | 'mappingMode'
+    | 'fullEventJsonataExpression'
+    | 'fullEventRegexConfigJson'
+    | 'dataProtection'
+    | 'dataPolicy'
   >,
 ): SharedCard[] {
   const transformOk = globalTransformConfigured(state)
   const protectionOk = globalProtectionConfigured(state.dataProtection)
+  const classificationOk = globalClassificationConfigured(state.dataPolicy, state.dataProtection)
+  const policyOk = globalPolicyConfigured(state.dataPolicy, state.dataProtection)
   return [
     {
       key: 'transform',
@@ -38,9 +53,23 @@ function buildSharedCards(
     {
       key: 'data_protection',
       title: 'Data Protection',
-      description: 'Schema drift policy, protection rules, delivery behavior.',
+      description: 'Schema drift policy and field protection rules.',
       configured: protectionOk,
       icon: ShieldCheck,
+    },
+    {
+      key: 'classification',
+      title: 'Classification',
+      description: 'Shared default level inherited by every route.',
+      configured: classificationOk,
+      icon: Tags,
+    },
+    {
+      key: 'policy',
+      title: 'Policy',
+      description: 'Shared delivery policy inherited by every route.',
+      configured: policyOk,
+      icon: Scale,
     },
   ]
 }
@@ -63,6 +92,7 @@ export function WizardSharedProcessingSection({
     | 'fullEventJsonataExpression'
     | 'fullEventRegexConfigJson'
     | 'dataProtection'
+    | 'dataPolicy'
   >
   activeTab: SharedProcessingTab
   onTabChange: (tab: SharedProcessingTab) => void
@@ -70,6 +100,7 @@ export function WizardSharedProcessingSection({
   routeCount?: number
 }) {
   const cards = buildSharedCards(state)
+  const panelId = 'shared-processing-tabpanel'
 
   return (
     <section className="space-y-3" data-testid="shared-processing-section">
@@ -82,7 +113,8 @@ export function WizardSharedProcessingSection({
             </span>
           </div>
           <p className="mt-1 text-[12px] text-slate-600 dark:text-gdc-muted">
-            Configure shared defaults first — all routes inherit these settings unless overridden individually.
+            Configure shared defaults first — all routes inherit Transform, Data Protection, Classification, and Policy
+            unless overridden individually.
           </p>
           {routeCount > 0 ? (
             <p
@@ -94,7 +126,7 @@ export function WizardSharedProcessingSection({
           ) : null}
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {cards.map((card) => {
             const Icon = card.icon
             const active = activeTab === card.key
@@ -154,7 +186,9 @@ export function WizardSharedProcessingSection({
                 key={tab.key}
                 type="button"
                 role="tab"
+                id={`shared-processing-tab-${tab.key}`}
                 aria-selected={active}
+                aria-controls={panelId}
                 onClick={() => onTabChange(tab.key)}
                 className={cn(
                   '-mb-px border-b-2 px-3 pb-2 text-[11px] font-semibold',
@@ -171,10 +205,12 @@ export function WizardSharedProcessingSection({
         </div>
 
         <div
+          id={panelId}
           className="mt-4 space-y-4 rounded-lg border border-slate-200/90 bg-slate-50/50 p-3 dark:border-gdc-border dark:bg-gdc-section/40"
           data-testid="shared-processing-editor"
           data-shared-edit-mode="true"
           role="tabpanel"
+          aria-labelledby={`shared-processing-tab-${activeTab}`}
         >
           {children}
         </div>
@@ -191,39 +227,3 @@ export function summarizeSharedProtection(dataProtection: WizardDataProtectionSt
 
 /** @deprecated Use summarizeSharedProtection */
 export const summarizeGlobalProtection = summarizeSharedProtection
-
-function SharedPolicySummary({
-  dataProtection,
-}: {
-  dataProtection: WizardDataProtectionState
-}) {
-  const configuredIntents = dataProtection.intents.filter((i) => i.detectedField.trim())
-  return (
-    <div className="space-y-3" data-testid="shared-policy-editor">
-      <p className="text-[12px] leading-relaxed text-slate-600 dark:text-gdc-muted">
-        Per-field delivery behavior is configured in{' '}
-        <span className="font-semibold text-slate-800 dark:text-slate-100">Data Protection</span> rules. Routes inherit
-        these defaults unless a route policy override is set.
-      </p>
-      {configuredIntents.length > 0 ? (
-        <ul className="space-y-1.5 text-[11px]">
-          {configuredIntents.map((intent) => (
-            <li
-              key={intent.key}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200/90 bg-white px-2.5 py-1.5 dark:border-gdc-border dark:bg-gdc-card"
-            >
-              <span className="font-mono text-slate-800 dark:text-slate-100">{intent.detectedField}</span>
-              <span className="font-semibold text-slate-600 dark:text-gdc-muted">{intent.deliveryBehavior}</span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="text-[11px] text-slate-500 dark:text-gdc-muted">
-          No protection rules yet — add fields in the Data Protection tab to define delivery behavior.
-        </p>
-      )}
-    </div>
-  )
-}
-
-export { SharedPolicySummary }

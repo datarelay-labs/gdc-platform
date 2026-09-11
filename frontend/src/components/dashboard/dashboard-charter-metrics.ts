@@ -44,6 +44,7 @@ export type StreamGroupRow = {
   connectorName: string
   connectorProductGroup?: string | null
   status: StreamRuntimeStatus
+  openSchemaFieldDriftCount?: number
 }
 
 export type TrafficOverviewMetrics = {
@@ -76,6 +77,27 @@ function safeNonNeg(n: unknown): number {
   const x = typeof n === 'number' ? n : Number(n)
   if (!Number.isFinite(x) || x < 0) return 0
   return Math.floor(x)
+}
+
+export function openSchemaFieldDriftCount(
+  stream: Pick<OperationalSnapshotResponse['streams'][number], 'open_schema_field_drift_count'> | undefined,
+): number {
+  return safeNonNeg(stream?.open_schema_field_drift_count ?? 0)
+}
+
+export function deriveFleetSchemaDriftFromSnapshot(snapshot: OperationalSnapshotResponse | null): {
+  openDriftCount: number
+  affectedStreamCount: number
+} {
+  const streams = snapshot?.streams ?? []
+  let openDriftCount = 0
+  let affectedStreamCount = 0
+  for (const stream of streams) {
+    const n = openSchemaFieldDriftCount(stream)
+    openDriftCount += n
+    if (n > 0) affectedStreamCount += 1
+  }
+  return { openDriftCount, affectedStreamCount }
 }
 
 export function deriveOverallHealth(health: HealthOverviewResponse | null): OverallHealthCounts {
@@ -152,6 +174,7 @@ export function deriveStreamGroupHealthFromSnapshot(
       connectorName: connector?.name?.trim() || (s.connector_id != null ? `Connector #${s.connector_id}` : s.stream_name),
       connectorProductGroup: connector?.product_group ?? null,
       status,
+      openSchemaFieldDriftCount: openSchemaFieldDriftCount(s),
     }
   })
   const groups = groupRowsBySourceProduct(rows)
@@ -274,17 +297,12 @@ export function deriveOperationalIssues(
 
 export function deriveOperationalIssuesFromSnapshot(
   snapshot: OperationalSnapshotResponse | null,
-  dashboard: DashboardSummaryResponse | null,
+  _dashboard: DashboardSummaryResponse | null,
 ): OperationalIssueCounts {
   const streams = snapshot?.streams ?? []
   const idleCount = streams.filter((s) => s.enabled && s.health_status === 'IDLE').length
   const degradedCount = streams.filter((s) => s.enabled && s.health_status === 'DEGRADED').length
-  const validation = dashboard?.validation_operational
-  const schemaDriftCount = validation
-    ? safeNonNeg(validation.open_checkpoint_drift_alerts) +
-      safeNonNeg(validation.failing_validations_count) +
-      safeNonNeg(validation.degraded_validations_count)
-    : null
+  const schemaDriftCount = deriveFleetSchemaDriftFromSnapshot(snapshot).openDriftCount
   const destinationCapacityWarnings = (snapshot?.problems ?? []).filter(
     (p) => p.scope === 'destination' && p.severity === 'warning',
   ).length
@@ -346,7 +364,8 @@ export type DashboardKpiItem = {
 
 // ── Overall Health Beacon ──────────────────────────────────────────────────
 
-export type OverallHealthBeaconLabel = 'OPERATIONAL' | 'DEGRADED' | 'INCIDENT' | 'CRITICAL'
+/** Operator-facing overall health labels (charter: Healthy / Warning / Critical). */
+export type OverallHealthBeaconLabel = 'Healthy' | 'Warning' | 'Critical'
 
 export type OverallHealthBeacon = {
   label: OverallHealthBeaconLabel
@@ -354,6 +373,14 @@ export type OverallHealthBeacon = {
   lastIncidentAt: string | null
   posture: 'healthy' | 'warning' | 'critical'
 }
+
+/** Primary operational-issue IDs shown on the Dashboard (detail metrics demoted elsewhere). */
+export const PRIMARY_OPERATIONAL_ISSUE_IDS = [
+  'no-data',
+  'low-volume',
+  'schema-drift',
+  'capacity-warning',
+] as const
 
 // ── System Health Summary Strip ────────────────────────────────────────────
 
@@ -1091,7 +1118,7 @@ export function deriveOverallHealthBeacon(
   alertsSummary: RecentAlertsSummary,
 ): OverallHealthBeacon {
   if (snapshot == null) {
-    return { label: 'OPERATIONAL', description: 'Loading operational state…', lastIncidentAt: null, posture: 'healthy' }
+    return { label: 'Healthy', description: 'Loading operational state…', lastIncidentAt: null, posture: 'healthy' }
   }
 
   const globalHealth = snapshot.global.health_status
@@ -1113,16 +1140,16 @@ export function deriveOverallHealthBeacon(
   let posture: OverallHealthBeacon['posture']
 
   if (alertsSummary.critical > 0 || globalHealth === 'ERROR' || criticalProblems.length > 0) {
-    label = 'CRITICAL'
+    label = 'Critical'
     const firstCritical = criticalProblems[0]
     description = firstCritical ? firstCritical.title : 'Critical delivery issues detected'
     posture = 'critical'
   } else if (alertsSummary.warning > 0 || globalHealth === 'DEGRADED' || warningProblems.length > 0) {
-    label = 'DEGRADED'
+    label = 'Warning'
     description = warningProblems[0]?.title ?? 'Some delivery paths are degraded'
     posture = 'warning'
   } else {
-    label = 'OPERATIONAL'
+    label = 'Healthy'
     description = 'All delivery paths healthy'
     posture = 'healthy'
   }
@@ -1134,21 +1161,14 @@ export function deriveOverallHealthBeacon(
 
 export function deriveSystemHealthSummaryStrip(
   snapshot: OperationalSnapshotResponse | null,
-  dashboard: DashboardSummaryResponse | null,
+  _dashboard: DashboardSummaryResponse | null,
 ): SystemHealthSummaryItem[] {
   const streams = snapshot?.streams ?? []
   const problems = snapshot?.problems ?? []
 
   const noDataCount = streams.filter((s) => s.enabled && s.health_status === 'IDLE').length
   const lowVolumeCount = streams.filter((s) => s.enabled && s.health_status === 'DEGRADED').length
-
-  const validation = dashboard?.validation_operational
-  const schemaDriftCount = validation
-    ? safeNonNeg(validation.open_checkpoint_drift_alerts) + safeNonNeg(validation.failing_validations_count)
-    : problems.filter((p) => {
-        const t = p.title.toLowerCase()
-        return t.includes('drift') || t.includes('schema')
-      }).length
+  const schemaDriftCount = deriveFleetSchemaDriftFromSnapshot(snapshot).openDriftCount
 
   const capacityWarningCount = problems.filter(
     (p) => p.scope === 'destination' && p.severity === 'warning',
@@ -1161,7 +1181,7 @@ export function deriveSystemHealthSummaryStrip(
       return t.includes('checkpoint') || t.includes('lag')
     }).length
 
-  return [
+  const all: SystemHealthSummaryItem[] = [
     {
       id: 'no-data',
       label: 'No Data Streams',
@@ -1197,6 +1217,67 @@ export function deriveSystemHealthSummaryStrip(
       label: 'Replay Queue',
       count: 0,
       status: 'ok',
+    },
+  ]
+  return all
+}
+
+/** Primary Dashboard operational issues only (checkpoint / replay demoted from primary). */
+export function derivePrimaryOperationalIssueStrip(
+  snapshot: OperationalSnapshotResponse | null,
+  dashboard: DashboardSummaryResponse | null,
+): SystemHealthSummaryItem[] {
+  const primary = new Set<string>(PRIMARY_OPERATIONAL_ISSUE_IDS)
+  return deriveSystemHealthSummaryStrip(snapshot, dashboard).filter((item) => primary.has(item.id))
+}
+
+/**
+ * Charter primary traffic KPIs from the operational snapshot (no mock values).
+ * Incoming / Outgoing are estimated event counts over the 5m snapshot window.
+ */
+export function derivePrimaryTrafficKpisFromSnapshot(
+  snapshot: OperationalSnapshotResponse | null,
+): DashboardKpiItem[] {
+  const traffic = deriveTrafficOverviewFromSnapshot(snapshot)
+  const successRatePct = traffic.deliverySuccessRatePct
+  const bulletTarget = 99
+  return [
+    {
+      id: 'incoming-events',
+      label: 'Incoming Events',
+      value: formatMetricCount(traffic.incomingEvents),
+      sub: traffic.incomingEvents == null ? 'No ingest in window' : `${SNAPSHOT_KPI_BASIS_LABEL} estimate`,
+      basisLabel: SNAPSHOT_KPI_BASIS_LABEL,
+      tone: 'green',
+      sparkline: [],
+      href: '/streams',
+    },
+    {
+      id: 'outgoing-events',
+      label: 'Outgoing Events',
+      value: formatMetricCount(traffic.outgoingEvents),
+      sub: traffic.outgoingEvents == null ? 'No delivery in window' : `${SNAPSHOT_KPI_BASIS_LABEL} estimate`,
+      basisLabel: SNAPSHOT_KPI_BASIS_LABEL,
+      tone: 'violet',
+      sparkline: [],
+      href: '/destinations',
+    },
+    {
+      id: 'success-rate',
+      label: 'Delivery Success Rate',
+      value: formatOperationalSuccessRate(successRatePct),
+      sub: successRatePct == null ? 'No delivery outcomes' : `Target ${bulletTarget}%`,
+      basisLabel: SNAPSHOT_KPI_BASIS_LABEL,
+      tone:
+        successRatePct != null && successRatePct >= bulletTarget
+          ? 'teal'
+          : successRatePct != null && successRatePct >= 90
+            ? 'amber'
+            : 'red',
+      sparkline: [],
+      href: '/destinations',
+      bulletValue: successRatePct ?? undefined,
+      bulletTarget,
     },
   ]
 }

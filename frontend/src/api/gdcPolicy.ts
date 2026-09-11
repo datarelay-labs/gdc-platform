@@ -6,14 +6,19 @@ const RT = `${GDC_API_PREFIX}/runtime`
 
 const readJsonOpts = { timeoutMs: GDC_DEFAULT_READ_JSON_TIMEOUT_MS }
 
-export type PolicyActionType = 'audit_only' | 'quarantine'
+export type PolicyActionType = 'audit_only' | 'quarantine' | 'block' | 'require_review'
+
+export type PolicyConditionJson = {
+  sensitivity_class?: string
+  classification_level?: string
+}
 
 export type PolicyRule = {
   id: number
   stream_id: number
   name: string
   enabled: boolean
-  condition_json: { sensitivity_class: string }
+  condition_json: PolicyConditionJson
   action_type: PolicyActionType
   created_at: string
   updated_at: string
@@ -61,7 +66,7 @@ export async function createPolicyRule(
   body: {
     name: string
     enabled?: boolean
-    condition_json: { sensitivity_class: string }
+    condition_json: PolicyConditionJson
     action_type?: PolicyActionType
   },
 ): Promise<{ rule: PolicyRule } | null> {
@@ -75,7 +80,12 @@ export async function createPolicyRule(
 export async function patchPolicyRule(
   streamId: number,
   ruleId: number,
-  body: { name?: string; enabled?: boolean; condition_json?: { sensitivity_class: string } },
+  body: {
+    name?: string
+    enabled?: boolean
+    condition_json?: PolicyConditionJson
+    action_type?: PolicyActionType
+  },
 ): Promise<{ rule: PolicyRule } | null> {
   return requestJson(`${RT}/streams/${streamId}/policy-rules/${ruleId}`, {
     method: 'PATCH',

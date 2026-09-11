@@ -18,8 +18,11 @@ from app.classification.models import (
     CLASSIFICATION_RESTRICTED,
 )
 from app.ai_providers.runtime_config import resolve_destination_runtime_config
-from app.destinations.models import Destination
 from app.dynamic_routing.models import StreamDynamicRoute
+from app.dynamic_routing.route_binding import (
+    load_stream_routes_by_destination,
+    try_resolve_existing_route,
+)
 from app.sensitive_detection.models import (
     SENSITIVITY_CLASS_PII,
     SENSITIVITY_CLASS_SECRET,
@@ -48,6 +51,7 @@ _SUPPORTED_CLASSIFICATION_CONDITION_LEVELS = frozenset(
 class DynamicRouteMatch:
     dynamic_route_id: int
     dynamic_route_name: str
+    route_id: int
     destination_id: int
     destination_name: str
     destination_type: str
@@ -62,6 +66,7 @@ class DynamicRoutingBatchResult:
     dynamic_route_count: int = 0
     matched_dynamic_route_count: int = 0
     selected_destination_count: int = 0
+    selected_route_ids: list[int] = field(default_factory=list)
     duration_ms: int = 0
 
 
@@ -134,7 +139,8 @@ def evaluate_batch(
     finding_classes = _finding_classes(findings)
     classification_levels = classification_levels_from_events(events)
     matches: list[DynamicRouteMatch] = []
-    seen_destination_ids: set[int] = set()
+    seen_route_ids: set[int] = set()
+    routes_by_destination = load_stream_routes_by_destination(db, stream_id)
 
     for rule in rules:
         if not condition_matches(
@@ -143,13 +149,22 @@ def evaluate_batch(
             classification_levels=classification_levels,
         ):
             continue
-        dest = db.get(Destination, int(rule.destination_id))
+        bound = try_resolve_existing_route(
+            db,
+            stream_id=stream_id,
+            route_id=int(rule.route_id) if rule.route_id is not None else None,
+            destination_id=int(rule.destination_id),
+            routes_by_destination=routes_by_destination,
+        )
+        if bound is None:
+            continue
+        dest = bound.destination
         if dest is None:
             continue
-        dest_id = int(dest.id)
-        if dest_id in seen_destination_ids:
+        bound_route_id = int(bound.id)
+        if bound_route_id in seen_route_ids:
             continue
-        seen_destination_ids.add(dest_id)
+        seen_route_ids.add(bound_route_id)
         dest_type = str(dest.destination_type or "").strip().upper()
         dest_config = resolve_destination_runtime_config(
             db,
@@ -160,7 +175,8 @@ def evaluate_batch(
             DynamicRouteMatch(
                 dynamic_route_id=int(rule.id),
                 dynamic_route_name=str(rule.name),
-                destination_id=dest_id,
+                route_id=bound_route_id,
+                destination_id=int(dest.id),
                 destination_name=str(dest.name),
                 destination_type=dest_type,
                 destination_config=dest_config,
@@ -170,10 +186,12 @@ def evaluate_batch(
         )
 
     duration_ms = max(0, int((time.monotonic() - started) * 1000))
+    selected_route_ids = [int(match.route_id) for match in matches]
     return DynamicRoutingBatchResult(
         matches=matches,
         dynamic_route_count=len(rules),
         matched_dynamic_route_count=len(matches),
         selected_destination_count=len(matches),
+        selected_route_ids=selected_route_ids,
         duration_ms=duration_ms,
     )

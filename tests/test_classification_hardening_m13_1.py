@@ -44,6 +44,7 @@ from tests.test_classification_engine_m13 import _classification_test_app
 from tests.test_stream_runner_e2e import (
     _FakePoller,
     _FakeWebhookSender,
+    _add_enabled_route_for_destination,
     _build_runner,
     _seed_stream_runtime,
 )
@@ -397,6 +398,8 @@ def test_dynamic_routing_classification_preview_runtime_parity(
     db_session.add(dest_conf)
     db_session.add(dest_rest)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(dest_conf.id))
+    _add_enabled_route_for_destination(db_session, stream_id, int(dest_rest.id))
     create_dynamic_route(
         db_session,
         stream_id=stream_id,

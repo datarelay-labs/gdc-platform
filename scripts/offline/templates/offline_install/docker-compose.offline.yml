@@ -8,7 +8,7 @@ services:
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-gdc}
       POSTGRES_USER: ${POSTGRES_USER:-gdc}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gdc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
     volumes:
       - gdc_platform_postgres_data:/var/lib/postgresql/data
     expose:
@@ -19,19 +19,25 @@ services:
       timeout: 5s
       retries: 20
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   api:
     image: gdc-platform-api:offline
     container_name: gdc-platform-api
     pull_policy: never
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-gdc}:${POSTGRES_PASSWORD:-gdc}@postgres:5432/${POSTGRES_DB:-gdc}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-gdc}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-gdc}
       APP_ENV: production
-      REQUIRE_AUTH: ${REQUIRE_AUTH:-true}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-in-production}
-      GDC_PROXY_RELOAD_TOKEN: ${GDC_PROXY_RELOAD_TOKEN:-change-me-in-production}
+      REQUIRE_AUTH: "true"
+      AUTH_DEV_HEADER_TRUST: "false"
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY is required}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?ENCRYPTION_KEY is required}
+      GDC_PROXY_RELOAD_TOKEN: ${GDC_PROXY_RELOAD_TOKEN:?GDC_PROXY_RELOAD_TOKEN is required}
       GDC_SEED_ADMIN_PASSWORD: ${GDC_SEED_ADMIN_PASSWORD:-}
       ENABLE_DEV_VALIDATION_LAB: "false"
       DEV_VALIDATION_AUTO_START: "false"
@@ -47,6 +53,11 @@ services:
       retries: 10
       start_period: 90s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   frontend:
     image: gdc-platform-frontend:offline
@@ -61,13 +72,18 @@ services:
       retries: 10
       start_period: 120s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   reverse-proxy:
     image: gdc-platform-reverse-proxy:offline
     container_name: gdc-platform-reverse-proxy
     pull_policy: never
     environment:
-      GDC_PROXY_RELOAD_TOKEN: ${GDC_PROXY_RELOAD_TOKEN:-change-me-in-production}
+      GDC_PROXY_RELOAD_TOKEN: ${GDC_PROXY_RELOAD_TOKEN:?GDC_PROXY_RELOAD_TOKEN is required}
       GDC_UPSTREAM_API_HOST: api
       GDC_UPSTREAM_API_PORT: "8000"
       GDC_UPSTREAM_UI_HOST: frontend
@@ -86,6 +102,11 @@ services:
       retries: 8
       start_period: 20s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 volumes:
   gdc_platform_postgres_data:

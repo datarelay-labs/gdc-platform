@@ -1,10 +1,12 @@
 import { mapBackendStreamStatus } from '../../api/streamRows'
+import type { OperationalSnapshotResponse } from '../../api/operationalSnapshot'
 import type { DashboardSummaryResponse, HealthOverviewResponse, StreamRead } from '../../api/types/gdcApi'
+import { deriveFleetSchemaDriftFromSnapshot } from '../dashboard/dashboard-charter-metrics'
 
 export type GovernanceOperationalIssueCounts = {
   noDataStreams: number
   lowVolumeStreams: number
-  /** null = API data unavailable (not the same as 0 drift alerts). */
+  /** null = snapshot unavailable (not the same as 0 open drifts). */
   schemaDriftCount: number | null
   destinationCapacityWarnings: number
 }
@@ -20,6 +22,7 @@ export function deriveGovernanceOperationalIssues(
   health: HealthOverviewResponse | null,
   dashboard: DashboardSummaryResponse | null,
   streamsList: readonly StreamRead[] = [],
+  snapshot: OperationalSnapshotResponse | null = null,
 ): GovernanceOperationalIssueCounts {
   const streams = health?.streams
   const summary = dashboard?.summary
@@ -45,15 +48,10 @@ export function deriveGovernanceOperationalIssues(
         ? safeNonNeg(health.destinations.degraded)
         : 0
 
-  // Derive schema drift using the same source as the main dashboard:
-  // dashboard.validation_operational aggregates checkpoint drift + failing/degraded validation counts.
-  // If that field is absent (API failed or endpoint not yet available) return null, not 0.
-  const validation = dashboard?.validation_operational
-  const schemaDriftCount = validation != null
-    ? safeNonNeg(validation.open_checkpoint_drift_alerts) +
-      safeNonNeg(validation.failing_validations_count) +
-      safeNonNeg(validation.degraded_validations_count)
-    : null
+  // Schema Drift SoT matches Main Dashboard: confirmed open StreamSchemaFieldDrift
+  // via operational snapshot.open_schema_field_drift_count (fleet sum).
+  const schemaDriftCount =
+    snapshot != null ? deriveFleetSchemaDriftFromSnapshot(snapshot).openDriftCount : null
 
   return {
     noDataStreams,

@@ -43,6 +43,8 @@ PII_EXACT_LEAVES = frozenset(
         "home_address",
         "postal_code",
         "zip_code",
+        "credit_card",
+        "card_number",
     }
 )
 

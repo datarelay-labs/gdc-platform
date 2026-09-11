@@ -1,9 +1,9 @@
 # Route Processing Persist Roadmap (v1.x Backlog)
 
-**Status:** Design record — no implementation authorized  
-**Date:** 2026-06-20  
-**Branch context:** `feature/sensitive-detection-m5-clean` (post P2.1 Effective Status Alignment)  
-**Authority:** P2.2 Scope Decision — Option B (OSS v1 complete → v1.x backlog)  
+**Status:** Design record — persist kinds updated 2026-08-13 (P1-3 SoT alignment); flag default ON noted 2026-08-15 (P1-4)
+**Date:** 2026-06-20 (original); current persist kinds reflect wizard-deploy-projection.ts
+**Branch context:** historical `feature/sensitive-detection-m5-clean`; verify against current Runtime + wizard persist
+**Authority:** PRODUCT-CHARTER + [`source-of-truth-index.md`](source-of-truth-index.md)
 **Related:**
 
 - `docs/ux/DATA-RELAY-ROUTE-PROCESSING-UX-SPEC.md` (§24 Deploy Projection, §25 Effective Status Alignment)
@@ -60,35 +60,36 @@ Wizard Route Processing collects per-route **intent** that may not persist. Depl
 ```text
 projectRouteProcessingStatusFromDeployIntent(draft, dataProtection)
   → processing_status: Inherited | Overridden | Mixed
-  → persistKind: none | intent_only | governance
+  → persistKind: none | intent_only | governance | route_transform | route_protection
 ```
 
 | `persistKind` | Operator label | Meaning |
 |---------------|----------------|---------|
 | `none` | — | Shared Processing only |
-| `intent_only` | Intent only | Configured in wizard; **not saved** at deploy for that concern bundle |
-| `governance` | Persisted through governance rules | Field-level overrides in `governance.route_overrides` |
+| `intent_only` | Intent only | Incomplete override; **not saved** at deploy for that concern |
+| `governance` | Persisted through governance rules | Field-level / policy overrides in `governance.route_overrides` |
+| `route_transform` | Persisted through route transform | Route mapping/enrichment saved at deploy |
+| `route_protection` | Persisted through route protection | Route protection intents saved at deploy |
 
 Code: `wizard-deploy-projection.ts`. UX spec: §24.
 
-**OSS v1 posture:** Deploy Intent ≠ post-deploy Effective API truth for `intent_only` concerns. This is intentional and documented; **not a defect in OSS v1.**
+**Current posture:** Complete Transform and Protection overrides persist at deploy. Remaining `intent_only` cases are incomplete classification/protection payloads. Deploy Intent still is not post-deploy Effective API truth for `intent_only` concerns.
 
 ---
 
-## 2. Known Gaps
+## 2. Remaining Gaps
 
-Full **route override bundles** (`draft.inherit.<concern> === false` with route-scoped editor content) are **not** persisted at wizard deploy.
+Complete Transform / Protection / Policy overrides persist at wizard deploy. Remaining `intent_only` cases:
 
-| Gap | Wizard trigger | Current `persistKind` | Post-deploy Effective API | Runtime effect |
-|-----|----------------|----------------------|---------------------------|----------------|
-| **Transform Bundle Persist** | `inherit.transform = false` + route mapping/enrichment draft | `intent_only` | `Inherited` (stream mapping) | Stream transform fan-out only |
-| **Protection Bundle Persist** | `inherit.protection = false` + route-scoped protection intents | `intent_only` | Stream / governance only | No `RouteProtectionRule` rows |
-| **Classification Bundle Persist** | `inherit.classification = false` without floor override row | `intent_only` | Stream classification only | No `RouteClassificationRule` rows |
-| **Policy Bundle Persist** | `inherit.policy = false` + route delivery behavior | `intent_only` | Stream policy only | No route-level policy bundle |
+| Gap | Wizard trigger | Current `persistKind` | Notes |
+|-----|----------------|----------------------|-------|
+| **Classification without floor** | `inherit.classification = false` without floor override row | `intent_only` | No `RouteClassificationRule` row from wizard alone |
+| **Incomplete protection** | Protection override without ready non-audit intents | `intent_only` | Complete intents → `route_protection` |
+| **Incomplete concern payload** | Override flag without editor content | `intent_only` | Operator must complete payload or save post-deploy |
 
-**Note:** Field-level governance overrides (protection action, classification floor) **are** persisted and are **not** listed as gaps.
+**Already persisted (not gaps):** Transform bundle (`route_transform`), protection bundle with ready intents (`route_protection`), policy / field-level governance (`governance`), shared stream processing, route delivery metadata.
 
-**Workaround today:** Operator configures route bundles post-deploy via Route Edit APIs (`saveRouteMappingUiConfig`, `createRouteProtectionRule`, etc.).
+**Workaround for remaining intent_only:** Stream / Route Edit APIs after deploy.
 
 ---
 
@@ -97,6 +98,8 @@ Full **route override bundles** (`draft.inherit.<concern> === false` with route-
 **Milestone name:** Route Processing Full Persist MVP (v1.1)
 
 **Goal:** When an operator sets `inherit.<concern> = false` in Wizard Route Processing and deploys, the corresponding route-scoped bundle is persisted and post-deploy Effective API reflects **Overridden** (or **Mixed** where applicable).
+
+**Status note (2026-08-15):** Complete Transform, Protection (ready non-audit intents), and Policy/governance overrides already persist at wizard deploy. Remaining work is the `intent_only` cases in §2 (classification without floor; incomplete protection payload). Do not treat the original P0/P1 lists below as an unstarted backlog. Flag default ON is already shipped (P1-4); Failover/Replay on the route path are already shipped.
 
 ### In scope (P0 — v1.1)
 
@@ -114,8 +117,7 @@ Full **route override bundles** (`draft.inherit.<concern> === false` with route-
 
 ### Explicitly deferred past MVP (v1.2+)
 
-- `GDC_ROUTE_PROCESSING_ENABLED` default ON
-- Flag removal
+- Flag removal (`GDC_ROUTE_PROCESSING_ENABLED` remains as rollback)
 - Wizard step order changes beyond persist wiring
 - New governance schema versions
 
@@ -152,9 +154,9 @@ Full **route override bundles** (`draft.inherit.<concern> === false` with route-
 | **Route pipeline (flag ON)** | Full benefit — `process_route_pipeline()` consumes persisted route bundles |
 | **Effective API** | Already aligned for governance (P2.1); bundle persist closes remaining `intent_only` → `Inherited` gap |
 
-**Important:** Persist MVP **does not** require enabling `GDC_ROUTE_PROCESSING_ENABLED`. Persisted config is durable and visible in Route Edit / Effective API even when runtime uses legacy path. Flag ON graduation is a separate P2 item.
+**Important:** Persist MVP does **not** depend on the route-processing flag. Persisted config is durable and visible in Route Edit / Effective API on both the default route path and the legacy rollback path.
 
-**OSS v1 runtime behavior:** Unchanged until flag policy is explicitly updated in a later milestone.
+**Current runtime default (P1-4):** `GDC_ROUTE_PROCESSING_ENABLED=true`. Flag OFF remains rollback only.
 
 ---
 
@@ -173,12 +175,12 @@ Full **route override bundles** (`draft.inherit.<concern> === false` with route-
 
 | Flag | Current default | MVP behavior | Graduation (post-MVP) |
 |------|-----------------|--------------|------------------------|
-| `GDC_ROUTE_PROCESSING_ENABLED` | `False` (`app/config.py`) | Persist MVP **does not** flip default | P2: E2E validation → default ON roadmap → removal criteria |
+| `GDC_ROUTE_PROCESSING_ENABLED` | `True` (`app/config.py`, P1-4) | Persist MVP did not flip default; P1-4 graduated default ON | Flag OFF remains rollback; removal is a later candidate |
 
 **Principles:**
 
-1. **Persist first, flag second** — Operators can configure and store route bundles before route pipeline is default.
-2. **No silent behavior change on deploy** — Enabling flag in an environment is an explicit ops decision, not a side effect of v1.1 persist.
+1. **Persist remains independent of the flag** — Operators can configure and store route bundles on either runtime path.
+2. **No silent behavior change on deploy** — Switching the flag in an environment is an explicit ops decision.
 3. **Legacy path parity** — Governance overrides already work on flag OFF; document which bundle types require flag ON for full runtime effect (especially Transform).
 
 ---
@@ -225,7 +227,7 @@ Route Processing Full Persist MVP is **done** when:
 - [ ] UX spec updated (new section or §24 extension for `route_bundle` persist kind)
 - [ ] **OSS v1 deploy path behavior documented** — no undocumented breaking changes to streams created before v1.1
 
-**Not required for MVP DoD:** `GDC_ROUTE_PROCESSING_ENABLED` default ON, flag removal, Enterprise-only features.
+**Not required for MVP DoD:** flag removal, Enterprise-only features. (`GDC_ROUTE_PROCESSING_ENABLED` default ON was delivered in P1-4.)
 
 ---
 
@@ -239,7 +241,7 @@ The following remain **out of v1.x Full Persist MVP**:
 | New DB tables or alembic migrations | Tables already exist |
 | Runtime resolver / enforcement changes | Persist-only; runtime already dual-reads |
 | Wizard Deploy Persist work for unrelated concerns | e.g. union schema, connector materialization |
-| `GDC_ROUTE_PROCESSING_ENABLED` default ON | Separate P2 graduation milestone |
+| Flag removal | Rollback flag remains; default ON already shipped (P1-4) |
 | Route Processing UI net-new surfaces | Route Edit / Wizard editors largely exist; MVP is persist wiring |
 | AI-assisted transform, regex_replace, raw code execution | Product charter exclusions |
 | Enterprise-only governance features | Core route persist is OSS scope |
@@ -250,19 +252,19 @@ The following remain **out of v1.x Full Persist MVP**:
 
 ## Appendix: Persist Matrix (Reference)
 
-| Concern | Config type | OSS v1 persist | v1.x MVP target |
-|---------|-------------|----------------|-----------------|
+| Concern | Config type | Current persist | Remaining gap |
+|---------|-------------|-----------------|---------------|
 | Transform | Shared | YES | — |
-| Transform | Route bundle (`inherit=false`) | NO | **YES** |
+| Transform | Route bundle (`inherit=false`) | YES (complete override at deploy) | — |
 | Protection | Shared intents | YES | — |
 | Protection | Governance field override | YES | — |
-| Protection | Route bundle (`inherit=false`) | NO | **YES** |
+| Protection | Route bundle (`inherit=false`) | YES when non-audit intents are ready | Incomplete payload → `intent_only` |
 | Classification | Shared rules | YES | — |
 | Classification | Governance floor | YES | — |
-| Classification | Route bundle | NO | **YES** |
+| Classification | Route bundle | Floor override only | Override without floor → `intent_only` |
 | Policy | Shared rules | YES | — |
 | Policy | Governance delivery (field) | YES | — |
-| Policy | Route bundle (`inherit=false`) | NO | **YES** |
+| Policy | Route bundle (`inherit=false`) | YES via governance persist | — |
 | Delivery | Route metadata | YES | — |
 
 ---
@@ -272,3 +274,5 @@ The following remain **out of v1.x Full Persist MVP**:
 | Date | Change |
 |------|--------|
 | 2026-06-20 | Initial v1.x backlog definition (P2.2 Scope Decision) |
+| 2026-08-13 | Persist kinds aligned to wizard-deploy-projection.ts (P1-3) |
+| 2026-08-15 | Remove stale “flag default ON is future P2”; P1-4 already graduated default ON |

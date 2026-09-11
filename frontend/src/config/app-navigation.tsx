@@ -1,7 +1,11 @@
 import type { LucideIcon } from 'lucide-react'
-import { Cable, Database, Home, LayoutDashboard, Route, Settings, Shield, Truck, Workflow } from 'lucide-react'
+import { Cable, Database, Home, Settings, Truck, Workflow } from 'lucide-react'
 
-/** Primary sidebar leaf keys (DATA-RELAY-UX-CHARTER navigation). */
+/**
+ * Primary sidebar leaf keys (DATA-RELAY-UX-CHARTER navigation).
+ * Legacy keys (`routes`, `governance`, `governanceWorkspace`) remain for deep-link
+ * path helpers and PAGE_TITLE; they are not primary sidebar destinations.
+ */
 export type SidebarNavKey =
   | 'dashboard'
   | 'connectors'
@@ -12,7 +16,7 @@ export type SidebarNavKey =
   | 'governanceWorkspace'
   | 'administration'
 
-export type SidebarGroupId = 'dataSources' | 'delivery' | 'governance'
+export type SidebarGroupId = 'dataSources' | 'delivery'
 
 /** All routable workspace keys (includes legacy + in-page governance/admin sections). */
 export type AppNavKey =
@@ -83,20 +87,7 @@ const DELIVERY_GROUP: SidebarGroupItem = {
   id: 'delivery',
   label: 'Delivery',
   icon: Truck,
-  items: [
-    { key: 'destinations', label: 'Destinations', path: '/destinations', icon: Database },
-    { key: 'routes', label: 'Routes', path: '/routes', icon: Route },
-  ],
-}
-
-const GOVERNANCE_GROUP: SidebarGroupItem = {
-  id: 'governance',
-  label: 'Governance',
-  icon: Shield,
-  items: [
-    { key: 'governance', label: 'Dashboard', path: '/governance', icon: LayoutDashboard },
-    { key: 'governanceWorkspace', label: 'Governance Workspace', path: '/governance/workspace', icon: Shield },
-  ],
+  items: [{ key: 'destinations', label: 'Destinations', path: '/destinations', icon: Database }],
 }
 
 const ADMINISTRATION_ITEM: SidebarTopItem = {
@@ -106,12 +97,14 @@ const ADMINISTRATION_ITEM: SidebarTopItem = {
   icon: Settings,
 }
 
-/** Grouped sidebar structure (DATA-RELAY-UX-CHARTER). */
+/**
+ * Grouped sidebar structure (DATA-RELAY-UX-CHARTER).
+ * Governance ops and Routes console remain deep-link / contextual (not primary nav).
+ */
 export const SIDEBAR_STRUCTURE: readonly SidebarNavEntry[] = [
   { type: 'item', item: DASHBOARD_ITEM },
   { type: 'group', group: DATA_SOURCES_GROUP },
   { type: 'group', group: DELIVERY_GROUP },
-  { type: 'group', group: GOVERNANCE_GROUP },
   { type: 'item', item: ADMINISTRATION_ITEM },
 ] as const
 
@@ -120,13 +113,15 @@ export const SIDEBAR_TOP_ITEMS: readonly SidebarTopItem[] = [
   DASHBOARD_ITEM,
   ...DATA_SOURCES_GROUP.items,
   ...DELIVERY_GROUP.items,
-  ...GOVERNANCE_GROUP.items,
   ADMINISTRATION_ITEM,
 ] as const
 
-export function sidebarStructureForRole(canViewGovernance: boolean): readonly SidebarNavEntry[] {
-  if (canViewGovernance) return SIDEBAR_STRUCTURE
-  return SIDEBAR_STRUCTURE.filter((entry) => entry.type !== 'group' || entry.group.id !== 'governance')
+/**
+ * Role-filtered sidebar. Governance is no longer a primary group; `canViewGovernance`
+ * is retained for call-site compatibility (RBAC still gates /governance pages).
+ */
+export function sidebarStructureForRole(_canViewGovernance: boolean): readonly SidebarNavEntry[] {
+  return SIDEBAR_STRUCTURE
 }
 
 /** @deprecated Use sidebarStructureForRole. */

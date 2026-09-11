@@ -36,18 +36,20 @@ describe('projectRouteProcessingStatusFromDeployIntent', () => {
     expect(projection.concerns.transform.persistKind).toBe('none')
   })
 
-  it('marks transform override as intent only', () => {
+  it('marks transform override as route_transform persist', () => {
     const state = buildInitialState()
     const projection = projectRouteProcessingStatusFromDeployIntent(
       baseDraft('r1', { transform: false }),
       state.dataProtection,
     )
     expect(projection.statuses.transform).toBe('Overridden')
-    expect(projection.concerns.transform.persistKind).toBe('intent_only')
-    expect(deployIntentPersistLabel(projection.concerns.transform.persistKind)).toBe('Intent only')
+    expect(projection.concerns.transform.persistKind).toBe('route_transform')
+    expect(deployIntentPersistLabel(projection.concerns.transform.persistKind)).toBe(
+      'Persisted through route transform',
+    )
   })
 
-  it('preserves Mixed status for protection when inherit off and field overrides exist', () => {
+  it('marks Mixed protection with field overrides as governance persist', () => {
     const state = buildInitialState()
     state.dataProtection.routeOverrides = [
       {
@@ -64,7 +66,7 @@ describe('projectRouteProcessingStatusFromDeployIntent', () => {
       state.dataProtection,
     )
     expect(projection.statuses.protection).toBe('Mixed')
-    expect(projection.concerns.protection.persistKind).toBe('intent_only')
+    expect(projection.concerns.protection.persistKind).toBe('governance')
   })
 
   it('marks governance field protection override when inherit shared', () => {
@@ -108,5 +110,104 @@ describe('projectRouteProcessingStatusFromDeployIntent', () => {
     expect(counts.protection).toEqual({ override: 0, mixed: 1 })
     expect(counts.classification).toEqual({ override: 0, mixed: 0 })
     expect(counts.policy).toEqual({ override: 0, mixed: 0 })
+  })
+
+  it('marks policy-only override as governance persist without classification', () => {
+    const state = buildInitialState()
+    const projection = projectRouteProcessingStatusFromDeployIntent(
+      {
+        ...baseDraft('r1', { policy: false }),
+        overrides: { policy: { deliveryBehavior: 'quarantine' } },
+      },
+      state.dataProtection,
+    )
+    expect(projection.statuses.policy).toBe('Overridden')
+    expect(projection.statuses.classification).toBe('Inherited')
+    expect(projection.concerns.policy.persistKind).toBe('governance')
+    expect(projection.concerns.classification.persistKind).toBe('none')
+  })
+
+  it('marks classification+policy override as governance persist', () => {
+    const state = buildInitialState()
+    state.dataProtection.routeClassificationOverrides = [
+      {
+        key: 'c1',
+        routeDraftKey: 'r1',
+        classificationLevel: 'RESTRICTED',
+        enabled: true,
+      },
+    ]
+    const projection = projectRouteProcessingStatusFromDeployIntent(
+      {
+        ...baseDraft('r1', { classification: false, policy: false }),
+        overrides: { policy: { deliveryBehavior: 'quarantine' } },
+      },
+      state.dataProtection,
+    )
+    expect(projection.statuses.classification).toBe('Mixed')
+    expect(projection.statuses.policy).toBe('Overridden')
+    expect(projection.concerns.classification.persistKind).toBe('governance')
+    expect(projection.concerns.policy.persistKind).toBe('governance')
+  })
+
+  it('marks protection inherit-off with route intents as route_protection persist', () => {
+    const state = buildInitialState()
+    const projection = projectRouteProcessingStatusFromDeployIntent(
+      {
+        ...baseDraft('r1', { protection: false }),
+        overrides: {
+          protection: {
+            intents: [
+              {
+                key: 'i1',
+                detectedField: '$.email',
+                protectionAction: 'mask_full',
+                deliveryBehavior: 'continue',
+              },
+            ],
+            unknownNormalFieldPolicy: 'pass_through',
+            unknownSensitiveFieldPolicy: 'auto_protect',
+          },
+        },
+      },
+      state.dataProtection,
+    )
+    expect(projection.statuses.protection).toBe('Overridden')
+    expect(projection.concerns.protection.persistKind).toBe('route_protection')
+    expect(deployIntentPersistLabel(projection.concerns.protection.persistKind)).toBe(
+      'Persisted through route protection',
+    )
+  })
+
+  it('marks incomplete protection override without payload as intent_only', () => {
+    const state = buildInitialState()
+    const projection = projectRouteProcessingStatusFromDeployIntent(
+      baseDraft('r1', { protection: false }),
+      state.dataProtection,
+    )
+    expect(projection.statuses.protection).toBe('Overridden')
+    expect(projection.concerns.protection.persistKind).toBe('intent_only')
+  })
+
+  it('marks incomplete classification override without payload as intent_only', () => {
+    const state = buildInitialState()
+    const projection = projectRouteProcessingStatusFromDeployIntent(
+      baseDraft('r1', { classification: false }),
+      state.dataProtection,
+    )
+    expect(projection.statuses.classification).toBe('Overridden')
+    expect(projection.concerns.classification.persistKind).toBe('intent_only')
+  })
+
+  it('marks classification floor override as governance persist', () => {
+    const state = buildInitialState()
+    state.dataProtection.routeClassificationOverrides = [
+      { key: 'c1', routeDraftKey: 'r1', classificationLevel: 'RESTRICTED', enabled: true },
+    ]
+    const projection = projectRouteProcessingStatusFromDeployIntent(
+      baseDraft('r1', { classification: false }),
+      state.dataProtection,
+    )
+    expect(projection.concerns.classification.persistKind).toBe('governance')
   })
 })

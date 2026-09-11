@@ -1,11 +1,11 @@
 # M13.6 Route Runtime Delivery
 
-**Milestone:** M13.6 (Route Runtime Delivery)  
-**Status:** Spec only — no implementation authorized by this document  
-**Depends on:** M13.1 Route Processing Foundation (`specs/091-route-processing-architecture/spec.md`), M13.2 Per Route Transform (`specs/092-per-route-transform/spec.md`), M13.3 Per Route Protection (`specs/093-per-route-protection/spec.md`), M13.4 Per Route Classification (`specs/094-per-route-classification/spec.md`), M13.5 Per Route Policy (`specs/095-per-route-policy/spec.md`)  
-**Design review:** [`docs/architecture/route-data-model-review.md`](../../docs/architecture/route-data-model-review.md), [`docs/architecture/m13-route-architecture-design-review.md`](../../docs/architecture/m13-route-architecture-design-review.md), [`docs/architecture/m13-5-policy-design-review.md`](../../docs/architecture/m13-5-policy-design-review.md), [`docs/architecture/m13-6-delivery-design-review.md`](../../docs/architecture/m13-6-delivery-design-review.md), [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)  
-**Authority:** Product Charter 1.2.1, Master WBS 1.2.1, `.specify/memory/constitution.md`, Governance & Transform Policy v1.1, Governance UX Charter v1.1, Governance Workspace v1.1  
-**Architecture:** [`docs/architecture/route-processing-foundation-implementation-spec.md`](../../docs/architecture/route-processing-foundation-implementation-spec.md)  
+**Milestone:** M13.6 (Route Runtime Delivery)
+**Status:** CURRENT implementation spec for M13.6 (delivered). Original M13 rollout assumed flag default OFF; product default is ON as of P1-4 (`false` = rollback). Failover and Replay reuse the shared StreamRunner delivery primitive on the route path.
+**Depends on:** M13.1 Route Processing Foundation (`specs/091-route-processing-architecture/spec.md`), M13.2 Per Route Transform (`specs/092-per-route-transform/spec.md`), M13.3 Per Route Protection (`specs/093-per-route-protection/spec.md`), M13.4 Per Route Classification (`specs/094-per-route-classification/spec.md`), M13.5 Per Route Policy (`specs/095-per-route-policy/spec.md`)
+**Design review:** [`docs/architecture/route-data-model-review.md`](../../docs/architecture/route-data-model-review.md), [`docs/architecture/m13-route-architecture-design-review.md`](../../docs/architecture/m13-route-architecture-design-review.md), [`docs/architecture/m13-5-policy-design-review.md`](../../docs/architecture/m13-5-policy-design-review.md), [`docs/architecture/m13-6-delivery-design-review.md`](../../docs/architecture/m13-6-delivery-design-review.md), [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)
+**Authority:** Product Charter 1.2.1, Master WBS 1.2.1, `.specify/memory/constitution.md`, Governance & Transform Policy v1.1, Governance UX Charter v1.1, Governance Workspace v1.1
+**Architecture:** [`docs/architecture/route-processing-foundation-implementation-spec.md`](../../docs/architecture/route-processing-foundation-implementation-spec.md)
 **Gap analysis:** [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)
 
 ---
@@ -95,7 +95,7 @@ Product Charter 1.2.1 mandates **Route Based Delivery** with **Execution Unit = 
 | Reuse audit pipeline | `delivery_logs` policy + delivery stages with `route_id` |
 | Do NOT create new Delivery Engine | Disposition + observability orchestration only |
 | Do NOT create new Runtime / Runner | No second scheduler or runner class |
-| Feature flag default OFF | `GDC_ROUTE_PROCESSING_ENABLED=false` — legacy path unchanged |
+| Feature flag rollback path | `GDC_ROUTE_PROCESSING_ENABLED=false` — legacy path unchanged (product default is `true` as of P1-4) |
 | Existing Streams continue working | Dual path documented in §16 |
 
 ---

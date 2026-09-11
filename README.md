@@ -2,9 +2,9 @@
 
 **Version:** GA v1.0.2 (OSS)
 
-Data Relay is an open-source **Enterprise Data Control Gateway**. It collects data from external systems (HTTP API polling, webhook receiver), applies Mapping and Enrichment, runs schema drift detection, sensitive-data detection, protection, classification, and policy enforcement, then delivers events to multiple Destinations with governance, RBAC, and audit controls.
+Data Relay is an open-source **Enterprise Data Control Gateway**. It collects data from external systems (HTTP API polling, webhook receiver), applies Stream and Route Processing (Transform, optional Protection / Classification / Policy), runs schema drift detection and sensitive-data detection, then delivers events to multiple Destinations via Routes. Governance, RBAC, and audit are optional control-plane surfaces.
 
-Single source of truth for architecture: [`docs/master-design.md`](docs/master-design.md)
+Source of Truth: [`docs/architecture/source-of-truth-index.md`](docs/architecture/source-of-truth-index.md) · [`PRODUCT-CHARTER v1.2.1`](docs/source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FINAL.txt)
 
 Release documentation: [`docs/release/`](docs/release/) · Documentation hub: [`docs/README.md`](docs/README.md)
 
@@ -40,7 +40,7 @@ See the [Product Charter](docs/source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FIN
 | Quarantine & Replay | ✅ |
 | Dashboard & Operations UX | ✅ |
 | Governance centers (RBAC-gated) | ✅ |
-| Per-route processing pipeline | ⚠️ Experimental (`GDC_ROUTE_PROCESSING_ENABLED`) |
+| Per-route processing pipeline | ✅ Default ON (`GDC_ROUTE_PROCESSING_ENABLED`) |
 
 Known gaps: [docs/release/KNOWN-LIMITATIONS.md](docs/release/KNOWN-LIMITATIONS.md)
 
@@ -53,9 +53,9 @@ Data Relay is a lightweight connector platform that:
 - Separates **Connectors**, **Streams**, **Sources**, and **Destinations**
 - Executes pipelines at the **Stream** level
 - Connects streams to destinations via **Routes** (multi-destination)
-- Applies **Mapping** before **Enrichment**
+- Applies **Transform** (Mapping then Enrichment internally) on Stream / Route Processing
 - Updates **Checkpoints** only after successful destination delivery
-- Provides **Governance** (violations, quarantine, replay, approvals, audit, notifications)
+- Optional **Governance** (violations, quarantine, replay, approvals, audit, notifications)
 - Enforces **RBAC** for operator and governance personas
 
 ---
@@ -148,11 +148,11 @@ After deploy, monitor on **Dashboard** (`/monitoring`) and **Streams** console. 
 
 GA ships with documented gaps — not release blockers for the default deployment path:
 
-- **Route Bundle Persist** — wizard route overrides may deploy as *Intent only*; persist via Route Edit post-deploy
+- **Route persist gaps** — incomplete classification/protection overrides may still deploy as *Intent only*; complete Transform/Protection/Policy overrides persist at deploy (see Known Limitations)
 - **Governance Workspace scale** — 4 API calls per route on load (slow at 50+ routes)
 - **Streams scale** — per-stream runtime stats at 50–100 streams (see performance docs)
 - **Database Query** — PostgreSQL runtime only
-- **`GDC_ROUTE_PROCESSING_ENABLED`** — default OFF; experimental per-route pipeline
+- **`GDC_ROUTE_PROCESSING_ENABLED`** — default ON (Route Processing runtime); set `false` to use the legacy stream-scoped path
 
 Full reference: [`docs/release/KNOWN-LIMITATIONS.md`](docs/release/KNOWN-LIMITATIONS.md)
 
@@ -160,7 +160,7 @@ Full reference: [`docs/release/KNOWN-LIMITATIONS.md`](docs/release/KNOWN-LIMITAT
 
 ## Governance
 
-After streams are running, use **Governance** in the sidebar:
+Governance is **optional** and **not** a primary sidebar item. Surfaces are RBAC-gated deep links (`/governance/*`):
 
 | Surface | Purpose |
 |---------|---------|
@@ -173,7 +173,7 @@ After streams are running, use **Governance** in the sidebar:
 | **Audit** | Immutable governance audit trail |
 | **Notifications** | Email and webhook alert configuration |
 
-RBAC controls who can view governance surfaces. Users without `governance_read` do not see the Governance menu.
+RBAC controls who can view governance surfaces. Users without `governance_read` cannot use governance deep links.
 
 ---
 
@@ -184,7 +184,7 @@ RBAC controls who can view governance surfaces. Users without `governance_read` 
 | **Users & Roles** | Settings | Platform users, roles, credentials |
 | **Destinations** | Destinations | Reusable delivery endpoints |
 | **Connectors** | Connectors | Source connectors |
-| **Routes** | Routes | Stream-to-destination links |
+| **Routes** | Stream / Destinations drill-down | Stream-to-destination links (not primary sidebar) |
 | **Backup** | Backup & Import | Configuration export/import |
 
 ---
@@ -197,7 +197,8 @@ Key environment variables (see [`.env.example`](.env.example)):
 |----------|----------|-------------|
 | `DATABASE_URL` | Yes | PostgreSQL connection string |
 | `JWT_SECRET_KEY` | Yes | JWT signing secret (`JWT_SECRET` in operator docs) |
-| `SMTP_ENABLED` | Yes | Enable SMTP for governance email (`false` until configured) |
+| `SMTP_ENABLED` | Yes | Enable SMTP for governance/operational email (`false` until configured) |
+| `SMTP_HOST` | No | SMTP server hostname (required when `SMTP_ENABLED=true`) |
 | `WEBHOOK_TIMEOUT` | Yes | Governance webhook timeout in seconds (default `10`) |
 | `REQUIRE_AUTH` | Yes | Require login for API/UI |
 | `ENABLE_DEV_VALIDATION_LAB` | No | Must be `false` in production |
@@ -251,7 +252,7 @@ cd frontend && npm run validate
 | [`docs/release/OSS-v1.0-GA-RELEASE-NOTES.md`](docs/release/OSS-v1.0-GA-RELEASE-NOTES.md) | GA release notes |
 | [`docs/release/KNOWN-LIMITATIONS.md`](docs/release/KNOWN-LIMITATIONS.md) | Known gaps reference |
 | [`docs/release/OSS-v1.0-GA-CHECKLIST.md`](docs/release/OSS-v1.0-GA-CHECKLIST.md) | GA verification checklist |
-| [`docs/master-design.md`](docs/master-design.md) | Architecture reference |
+| [`docs/master-design.md`](docs/master-design.md) | Historical design (SUPERSEDED — do not use as SoT) |
 | [`docs/deployment/install-guide.md`](docs/deployment/install-guide.md) | Detailed install |
 | [`docs/release/installation-validation.md`](docs/release/installation-validation.md) | Install verification steps |
 | [`docs/release/production-checklist.md`](docs/release/production-checklist.md) | Production go-live checklist |

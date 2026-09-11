@@ -85,39 +85,24 @@ curl -sk -X POST https://localhost:18443/api/v1/auth/login \
 ## Step 5 — Create stream (UI)
 
 1. Navigate to **Streams** → **Create First Stream**
-2. Wizard steps:
+2. Wizard steps (Destination First):
    - **Connect** — HTTP API polling (see `samples/http/example-api.json`)
-   - **Mapping** — import field paths from `samples/mappings/example-mapping.json`
-   - **Destination** — create webhook or syslog from `samples/destinations/`
-   - **Review** — enable and save
+   - **Sample & Record Selection** — run API test, set record path / checkpoint
+   - **Destinations** — create webhook or syslog from `samples/destinations/` and attach routes
+   - **Route Processing** — shared transform/protection (optional) + per-route inherit/override; mapping sample: `samples/mappings/example-mapping.json`
+   - **Deploy** — review decision center, create stream, start delivery
 
 ---
 
-## Step 6 — API test
+## Step 6 — Destination & route (if not created in wizard)
 
-In the stream wizard **API Test** step, run a sample fetch against the configured source.
-
-**Expected:** Sample events returned; no auth errors.
-
----
-
-## Step 7 — Mapping & enrichment
-
-Apply JSONPath mappings and optional enrichment from sample pack files.
-
-**Expected:** Transform preview shows mapped output fields.
-
----
-
-## Step 8 — Destination & route
-
-Create destination (Administration → Destinations) and link via Routes or wizard.
+Create destination under **Delivery → Destinations** and attach via the wizard Destinations step or stream detail.
 
 **Expected:** Route shows ENABLED; connectivity test available for webhook/syslog.
 
 ---
 
-## Step 9 — Run stream
+## Step 7 — Run stream
 
 Start the stream from Streams console or runtime panel.
 
@@ -129,13 +114,15 @@ Start the stream from Streams console or runtime panel.
 
 ---
 
-## Step 10 — Governance & RBAC smoke
+## Step 8 — Governance & RBAC smoke (optional)
+
+Governance is not a primary sidebar item. Use RBAC-gated deep links if the role allows.
 
 | Check | Path | Expected |
 |-------|------|----------|
 | Governance Dashboard | `/governance` | KPI cards render; empty state on fresh install |
 | Operations | `/governance/operations` | Page loads for authorized role |
-| RBAC | Login as VIEWER | Governance sidebar hidden without `governance_read` |
+| RBAC | Login as VIEWER | Governance deep links unavailable without `governance_read` |
 | Notifications | `/governance/notifications` | Config page loads |
 
 ---

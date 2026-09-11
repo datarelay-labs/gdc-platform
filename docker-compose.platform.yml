@@ -50,6 +50,11 @@ services:
     ports:
       - "127.0.0.1:${GDC_PLATFORM_POSTGRES_HOST_PORT:-55432}:5432"
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   api:
     build:
@@ -63,6 +68,7 @@ services:
       # Reduce glibc per-thread arena fragmentation in long-lived uvicorn workers.
       MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
       GDC_RUNTIME_IN_CONTAINER: "true"
+      GDC_ROUTE_PROCESSING_ENABLED: ${GDC_ROUTE_PROCESSING_ENABLED:-true}
       GDC_ENABLE_IN_PROCESS_SCHEDULER: ${GDC_ENABLE_IN_PROCESS_SCHEDULER:-false}
       GDC_UVICORN_WORKERS: ${GDC_UVICORN_WORKERS:-2}
       APP_ENV: ${APP_ENV:-development}
@@ -96,6 +102,15 @@ services:
       # Dev-validation startup must be immediately inspectable by smoke checks and UI/API probes.
       REQUIRE_AUTH: "false"
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      SMTP_ENABLED: ${SMTP_ENABLED:-false}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_STARTTLS: ${SMTP_STARTTLS:-true}
+      SMTP_SSL: ${SMTP_SSL:-false}
+      SMTP_TIMEOUT: ${SMTP_TIMEOUT:-10}
       GDC_TRUST_PROXY_HEADERS: "true"
       GDC_PROXY_FORWARD_TRUSTED_HOSTS: "*"
       GDC_TLS_CERT_PATH: /var/gdc/tls/server.crt
@@ -138,6 +153,11 @@ services:
     # Cap runaway RSS while allowing modest swap spill (host has ~20GiB RAM + swap).
     mem_limit: ${GDC_API_MEM_LIMIT:-10g}
     memswap_limit: ${GDC_API_MEMSWAP_LIMIT:-14g}
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     command: ["sh", "-c", "alembic upgrade head && python -m app.db.seed --platform-admin-only && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${GDC_UVICORN_WORKERS:-2}"]
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/health"]
@@ -158,6 +178,7 @@ services:
       GDC_DB_MAX_OVERFLOW: ${GDC_SCHEDULER_DB_MAX_OVERFLOW:-8}
       MALLOC_ARENA_MAX: ${MALLOC_ARENA_MAX:-2}
       GDC_RUNTIME_IN_CONTAINER: "true"
+      GDC_ROUTE_PROCESSING_ENABLED: ${GDC_ROUTE_PROCESSING_ENABLED:-true}
       GDC_ENABLE_IN_PROCESS_SCHEDULER: "true"
       APP_ENV: ${APP_ENV:-development}
       ENABLE_DEV_VALIDATION_LAB: ${ENABLE_DEV_VALIDATION_LAB:-true}
@@ -177,14 +198,32 @@ services:
       - gdc-dev-validation
     mem_limit: ${GDC_SCHEDULER_MEM_LIMIT:-4g}
     memswap_limit: ${GDC_SCHEDULER_MEMSWAP_LIMIT:-6g}
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     command: ["sh", "-c", "python -m app.scheduler.standalone"]
+    # Override image HEALTHCHECK (Dockerfile.api probes uvicorn :8000). Standalone
+    # scheduler has no HTTP listener; verify the process itself is running.
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import pathlib; raise SystemExit(0 if any(b'app.scheduler.standalone' in p.read_bytes() for p in pathlib.Path('/proc').glob('[0-9]*/cmdline')) else 1)\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
     restart: unless-stopped
 
   gdc-wiremock-test:
     image: wiremock/wiremock:3.9.1
     volumes:
       - ./tests/wiremock:/home/wiremock
-    command: ["--verbose", "--max-request-journal-entries", "500"]
+    # Avoid --verbose request dumps (primary cause of 100G+ json-file growth).
+    command: ["--max-request-journal-entries", "500"]
     expose:
       - "8080"
     networks:
@@ -194,6 +233,13 @@ services:
     restart: unless-stopped
     mem_limit: 512m
     memswap_limit: 768m
+    cpus: "1.0"
+    pids_limit: 512
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   gdc-webhook-receiver-test:
     image: mendhak/http-https-echo:33
@@ -202,6 +248,15 @@ services:
     expose:
       - "8080"
     restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 384m
+    cpus: "0.5"
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   gdc-syslog-test:
     build:
@@ -212,6 +267,15 @@ services:
       - "5514/tcp"
       - "5514/udp"
     restart: unless-stopped
+    mem_limit: 256m
+    memswap_limit: 384m
+    cpus: "0.5"
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   frontend:
     build:
@@ -229,6 +293,11 @@ services:
       retries: 10
       start_period: 120s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   reverse-proxy:
     build:
@@ -248,12 +317,23 @@ services:
       - gdc_platform_tls:/var/gdc/tls
       - gdc_platform_nginx:/etc/nginx/conf.d
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      # HTTPS-enabled nginx redirects :80 → HTTPS; probe HTTPS first. Fall back to
+      # HTTP 200 without following redirects (bootstrap HTTP-only mode).
+      test:
+        [
+          "CMD-SHELL",
+          "wget --no-check-certificate -qO- https://127.0.0.1/health >/dev/null 2>&1 || wget --max-redirect=0 -S -O /dev/null http://127.0.0.1/health 2>&1 | grep -q ' 200 '",
+        ]
       interval: 15s
       timeout: 5s
       retries: 8
       start_period: 20s
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
 
 volumes:
   gdc_platform_postgres_data:

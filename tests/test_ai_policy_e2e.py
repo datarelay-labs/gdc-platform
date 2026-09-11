@@ -20,9 +20,11 @@ from app.ai_policy.service import create_ai_policy_rule
 from app.ai_streams.models import AiStream
 from app.database import get_db, get_db_read_bounded
 from app.logs.models import DeliveryLog
-from app.main import app
 from app.replay.models import StreamReplayEvent
+from tests.ai_gateway_http import build_ai_gateway_test_app
 from tests.test_ai_proxy_receiver import _seed_ai_proxy_stack
+
+app = build_ai_gateway_test_app()
 
 
 @pytest.fixture

@@ -148,6 +148,73 @@ describe('wizard-governance-persist', () => {
     ])
   })
 
+  it('emits policy-only delivery_behavior separately from classification override', () => {
+    const state = buildInitialState()
+    state.dataProtection.routeClassificationOverrides = [
+      {
+        key: 'c1',
+        routeDraftKey: 'r1',
+        classificationLevel: 'RESTRICTED',
+        enabled: true,
+      },
+    ]
+    state.destinations.routeDrafts = [
+      {
+        key: 'r1',
+        destinationId: 10,
+        enabled: true,
+        failurePolicy: 'LOG_AND_CONTINUE',
+        rateLimitJson: {},
+        inherit: { transform: true, protection: true, classification: false, policy: false },
+        overrides: { policy: { deliveryBehavior: 'block' } },
+      },
+    ]
+
+    const payload = buildStreamGovernancePayload(
+      state.dataProtection,
+      buildRouteDraftKeyToIdMap(state.destinations.routeDrafts, [801]),
+      state.destinations.routeDrafts,
+    )
+
+    expect(payload.route_overrides).toEqual([
+      {
+        route_id: 801,
+        classification_level: 'RESTRICTED',
+        enabled: true,
+      },
+      {
+        route_id: 801,
+        delivery_behavior: 'block',
+        enabled: true,
+      },
+    ])
+  })
+
+  it('emits policy-only override without classification or protection', () => {
+    const state = buildInitialState()
+    state.destinations.routeDrafts = [
+      {
+        key: 'r1',
+        destinationId: 10,
+        enabled: true,
+        failurePolicy: 'LOG_AND_CONTINUE',
+        rateLimitJson: {},
+        inherit: { transform: true, protection: true, classification: true, policy: false },
+        overrides: { policy: { deliveryBehavior: 'quarantine' } },
+      },
+    ]
+
+    const payload = buildStreamGovernancePayload(
+      state.dataProtection,
+      buildRouteDraftKeyToIdMap(state.destinations.routeDrafts, [901]),
+      state.destinations.routeDrafts,
+    )
+
+    expect(payload.route_overrides).toEqual([
+      { route_id: 901, delivery_behavior: 'quarantine', enabled: true },
+    ])
+  })
+
   it('detects duplicate route classification override', () => {
     const overrides = [
       {

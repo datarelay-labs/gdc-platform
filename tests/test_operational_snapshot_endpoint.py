@@ -276,6 +276,81 @@ def test_operational_snapshot_health_rules(
     assert routes[err_h["route_id"]]["health_status"] == "ERROR"
 
 
+def test_operational_snapshot_open_schema_field_drift_counts(
+    snapshot_client: TestClient, db_session: Session
+) -> None:
+    from app.schema_observation.models import (
+        DRIFT_CATEGORY_FIELD_ADDED,
+        DRIFT_CATEGORY_FIELD_REMOVED,
+        DRIFT_STATUS_ACKNOWLEDGED,
+        DRIFT_STATUS_OPEN,
+        DRIFT_STATUS_RESOLVED,
+        StreamSchemaFieldDrift,
+    )
+
+    stream_a = _mk_hierarchy(db_session, stream_name="drift-a")
+    stream_b = _mk_hierarchy(db_session, stream_name="drift-b")
+    stream_c = _mk_hierarchy(db_session, stream_name="drift-c")
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [
+            StreamSchemaFieldDrift(
+                stream_id=stream_a["stream_id"],
+                field_path="$.email",
+                category=DRIFT_CATEGORY_FIELD_ADDED,
+                status=DRIFT_STATUS_OPEN,
+                first_detected_at=now,
+                last_confirmed_at=now,
+            ),
+            StreamSchemaFieldDrift(
+                stream_id=stream_a["stream_id"],
+                field_path="$.api_key",
+                category=DRIFT_CATEGORY_FIELD_REMOVED,
+                status=DRIFT_STATUS_OPEN,
+                first_detected_at=now,
+                last_confirmed_at=now,
+            ),
+            StreamSchemaFieldDrift(
+                stream_id=stream_b["stream_id"],
+                field_path="$.phone",
+                category=DRIFT_CATEGORY_FIELD_ADDED,
+                status=DRIFT_STATUS_OPEN,
+                first_detected_at=now,
+                last_confirmed_at=now,
+            ),
+            StreamSchemaFieldDrift(
+                stream_id=stream_c["stream_id"],
+                field_path="$.legacy",
+                category=DRIFT_CATEGORY_FIELD_REMOVED,
+                status=DRIFT_STATUS_RESOLVED,
+                first_detected_at=now,
+                last_confirmed_at=now,
+                resolved_at=now,
+            ),
+            StreamSchemaFieldDrift(
+                stream_id=stream_c["stream_id"],
+                field_path="$.acked",
+                category=DRIFT_CATEGORY_FIELD_ADDED,
+                status=DRIFT_STATUS_ACKNOWLEDGED,
+                first_detected_at=now,
+                last_confirmed_at=now,
+            ),
+        ]
+    )
+    db_session.commit()
+
+    resp = snapshot_client.get(ENDPOINT)
+    assert resp.status_code == 200
+    streams = {s["stream_id"]: s for s in resp.json()["streams"]}
+    assert streams[stream_a["stream_id"]]["open_schema_field_drift_count"] == 2
+    assert streams[stream_b["stream_id"]]["open_schema_field_drift_count"] == 1
+    assert streams[stream_c["stream_id"]]["open_schema_field_drift_count"] == 0
+    fleet_open = sum(int(s["open_schema_field_drift_count"]) for s in resp.json()["streams"])
+    affected = sum(1 for s in resp.json()["streams"] if int(s["open_schema_field_drift_count"]) > 0)
+    assert fleet_open == 3
+    assert affected == 2
+
+
 def test_stream_health_unit_rules() -> None:
     assert (
         classify_stream_health(
@@ -354,6 +429,7 @@ def test_should_flag_checkpoint_stale_only_for_active_delivery_lag() -> None:
         "fetch_route_last_outcomes",
         "fetch_destination_last_outcomes",
         "load_operational_snapshot_bulk_data",
+        "load_open_schema_field_drift_counts",
     )
     for name in bulk_loaders:
         assert hasattr(repo, name), name

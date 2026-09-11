@@ -208,6 +208,8 @@ from app.runtime.schemas import (
     MappingPreviewResponse,
     TransformPreviewRequest,
     TransformPreviewResponse,
+    SensitiveDetectionPreviewRequest,
+    SensitiveDetectionPreviewResponse,
     RouteDeliveryPreviewRequest,
     RouteDeliveryPreviewResponse,
     PipelineDebugRequest,
@@ -2061,7 +2063,7 @@ async def create_stream_policy_rule(
             stream_id=stream_id,
             name=body.name,
             enabled=body.enabled,
-            condition_json=body.condition_json.model_dump(),
+            condition_json=body.condition_json.model_dump(exclude_none=True),
             action_type=body.action_type,
         )
         db.commit()
@@ -2097,7 +2099,7 @@ async def patch_stream_policy_rule(
             rule_id=rule_id,
             name=body.name,
             enabled=body.enabled,
-            condition_json=body.condition_json.model_dump() if body.condition_json is not None else None,
+            condition_json=body.condition_json.model_dump(exclude_none=True) if body.condition_json is not None else None,
             action_type=body.action_type,
         )
         db.commit()
@@ -2189,6 +2191,7 @@ async def create_stream_dynamic_route(
             enabled=body.enabled,
             condition_json=body.condition_json.model_dump(),
             destination_id=body.destination_id,
+            route_id=body.route_id,
         )
         db.commit()
     except DynamicRouteValidationError as exc:
@@ -2225,6 +2228,7 @@ async def patch_stream_dynamic_route(
             enabled=body.enabled,
             condition_json=body.condition_json.model_dump() if body.condition_json is not None else None,
             destination_id=body.destination_id,
+            target_route_id=body.route_id,
         )
         db.commit()
     except DynamicRouteNotFoundError as exc:
@@ -3924,6 +3928,15 @@ async def preview_transform(payload: TransformPreviewRequest) -> TransformPrevie
     """Preview Advanced Transform rules (JSONata / regex_extract) via Safe Expression Engine."""
 
     return preview_service.run_transform_preview(payload)
+
+
+@router.post("/preview/sensitive-detection", response_model=SensitiveDetectionPreviewResponse)
+async def preview_sensitive_detection(
+    payload: SensitiveDetectionPreviewRequest,
+) -> SensitiveDetectionPreviewResponse:
+    """Run the existing Sensitive Detection Engine on sample events (suggestion-only)."""
+
+    return preview_service.run_sensitive_detection_preview(payload)
 
 
 @router.post("/preview/enrichment-validate", response_model=EnrichmentValidateResponse)

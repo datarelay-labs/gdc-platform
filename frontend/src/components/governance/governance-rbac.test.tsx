@@ -24,18 +24,19 @@ describe('governance RBAC (M20)', () => {
     clearTestSession()
   })
 
-  it('hides Governance sidebar for VIEWER', () => {
+  it('does not expose Governance as primary sidebar for VIEWER', () => {
     persistTestSession('VIEWER')
     expect(canViewGovernanceWorkspace()).toBe(false)
     const items = sidebarItemsForRole(canViewGovernanceWorkspace())
-    expect(items.some((i) => i.key === 'governance')).toBe(false)
+    expect(items.some((i) => i.key === 'governance' || i.key === 'governanceWorkspace')).toBe(false)
   })
 
-  it('shows Governance sidebar for GOVERNANCE_OPERATOR', () => {
+  it('does not expose Governance as primary sidebar for GOVERNANCE_OPERATOR (ops via deep link)', () => {
     persistTestSession('GOVERNANCE_OPERATOR')
     expect(canViewGovernance()).toBe(true)
     const items = sidebarItemsForRole(canViewGovernance())
-    expect(items.some((i) => i.key === 'governance')).toBe(true)
+    expect(items.some((i) => i.key === 'governance' || i.key === 'governanceWorkspace')).toBe(false)
+    expect(items.map((i) => i.key)).toEqual(['dashboard', 'connectors', 'streams', 'destinations', 'administration'])
   })
 
   it('CONNECTOR_OPERATOR can view but not edit policies', () => {

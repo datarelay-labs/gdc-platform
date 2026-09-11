@@ -1,6 +1,9 @@
 # M13.4 Per Route Classification — Design Review
 
-**Status:** Design review only — no code, implementation, or migrations  
+**Status:** SUPERSEDED (historical design review)  
+**Superseded By:** [`specs/094-per-route-classification`](../../specs/094-per-route-classification/spec.md)
+
+Design review only — no code, implementation, or migrations  
 **Date:** 2026-06-15  
 **Scope:** Spec 094 validation; compatibility with M13.5 (Policy), M13.6 (Route Runtime Delivery)  
 **Inputs:**

@@ -54,6 +54,8 @@ export type OperationalStreamSnapshot = {
   last_error_message: string | null
   checkpoint_updated_at: string | null
   checkpoint_lag_seconds: number | null
+  /** Confirmed open StreamSchemaFieldDrift rows for this stream. */
+  open_schema_field_drift_count?: number
 }
 
 export type OperationalRouteSnapshot = {

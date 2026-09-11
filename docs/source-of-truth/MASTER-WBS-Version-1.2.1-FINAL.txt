@@ -37,6 +37,14 @@ Enterprise Edition Backlog로 관리한다.
 
 --------------------------------------------------
 
+AI Gateway / AI Proxy 는 Data Relay OSS 제품 범위가 아니다.
+
+완료된 현재 제품 기능으로 취급하지 않는다.
+
+다음 WBS / Enterprise Edition Backlog로 자동 이동하지 않는다.
+
+--------------------------------------------------
+
 Data Relay는
 
 Enterprise Data Control Gateway이다.
@@ -354,74 +362,20 @@ Status
 RELEASED
 
 ==================================================
-Phase E
-AI Gateway
+Excluded From Current Product Scope
 ==================================================
 
-완료
+AI Gateway
 
-M21
+former Phase E / M21 / M22 / M23 / M24
 
-AI Gateway Foundation
+Data Relay OSS 제품 범위가 아니다.
 
---------------------------------------------------
+완료된 현재 제품 기능이 아니다.
 
-구현 범위
+다음 roadmap phase가 아니다.
 
-- AI Providers
-- AI Streams
-- AI Proxy Receiver
-- AI Traffic Routing
-- AI Traffic Dashboard
-- Failover
-- Replay
-
---------------------------------------------------
-
-지원 Provider
-
-- OpenAI
-- Claude
-- Gemini
-- Azure OpenAI
-- Ollama
-- vLLM
-
---------------------------------------------------
-
-M22
-
-AI Policy Enforcement
-
-- Prompt Policy
-- Response Policy
-- Enforcement
-- Block
-- Mask
-- Redact
-
---------------------------------------------------
-
-M23
-
-AI Audit & Inspection Hardening
-
-- Prompt Inspection
-- Response Inspection
-- AI Audit
-- Correlation
-- Metrics
-
---------------------------------------------------
-
-M24
-
-AI Governance
-
-- Governance Dashboard
-- Violations
-- Workflow
-- Impact Analysis
+Enterprise Edition Backlog로 이동하지 않는다.
 
 ==================================================
 Current Product Scope
@@ -456,14 +410,6 @@ Governance
 Phase D
 
 OSS Release
-
---------------------------------------------------
-
-완료
-
-Phase E
-
-AI Gateway
 
 ==================================================
 Phase F
@@ -596,11 +542,34 @@ OSS Release
 
 100%
 
---------------------------------------------------
+==================================================
+How To Read Completion Status
+==================================================
 
-AI Gateway
+The 100% figures in Current State are HISTORICAL MILESTONE COMPLETION
+as of OSS v1.0 GA. They mean the original WBS milestone scope was delivered.
 
-100%
+They do NOT mean current stabilization or Route Processing UX convergence
+is finished.
+
+Do not invent new completion percentages.
+
+Historical milestone completion (OSS v1.0 GA):
+
+- Foundation 100%
+- Data Control Runtime 100%
+- Governance 100%
+- OSS Release 100%
+
+Current stabilization / convergence (no new %):
+
+- OSS v1 Stabilization — active
+- Destination First Wizard UX — implemented in product (5-step)
+- Route Processing 5-stage UX — implemented in product
+- Remaining persist / runtime-flag / Failover+Replay-on-flag-on items
+  are Stabilization gaps, not unstarted WBS phases
+
+See docs/architecture/source-of-truth-index.md
 
 ==================================================
 Current Milestone
@@ -630,13 +599,14 @@ Next Priority
 2. Runtime Optimization
 
 3. UX Simplification
-   (DATA-RELAY-UX-CHARTER v1.1)
+   (DATA-RELAY-UX-CHARTER v1.2.1)
 
 4. Operational Dashboard Improvements
 
-5. Route Architecture Enablement
+Completed as product UX (do not treat as next work to start):
 
-6. Destination First Wizard UX
+- Destination First Wizard UX (v5.2 step order)
+- Route Architecture Enablement milestone (M13.1–M13.7)
 
 --------------------------------------------------
 

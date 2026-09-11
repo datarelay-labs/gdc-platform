@@ -9,6 +9,8 @@
 
 | Document | Audience | Description |
 |----------|----------|-------------|
+| [Source of Truth Index](./architecture/source-of-truth-index.md) | Cursor, architects | Reading order: PRODUCT-CHARTER → UX → specs → Runtime |
+| [Product Charter v1.2.1](./source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FINAL.txt) | Everyone | Top-level product authority |
 | [Getting Started](./getting-started/GETTING-STARTED.md) | New operators | First connector → stream → deploy → monitoring walkthrough |
 | [Architecture Overview (OSS v1)](./architecture/OSS-v1-ARCHITECTURE.md) | Integrators, architects | Mental model, runtime, checkpoint, replay, quarantine, failover |
 | [Root README](../README.md) | Everyone | Install, quick start, project overview |
@@ -19,10 +21,10 @@
 
 | Document | Description |
 |----------|-------------|
-| [OSS v1.0 GA Release Notes](./release/OSS-v1.0-GA-RELEASE-NOTES.md) | GA feature summary, milestones, known gaps, upgrade |
-| [OSS v1 RC Release Notes](./release/OSS-v1-RC-RELEASE-NOTES.md) | Prior RC release notes |
-| [Known Limitations](./release/KNOWN-LIMITATIONS.md) | Route bundle persist, scale, experimental flags |
-| [OSS v1.0 GA Checklist](./release/OSS-v1.0-GA-CHECKLIST.md) | Pre-release verification checklist |
+| [OSS v1.0 GA Release Notes](./release/OSS-v1.0-GA-RELEASE-NOTES.md) | Historical GA snapshot (2026-06-20) — not current flag/KPI truth |
+| [OSS v1 RC Release Notes](./release/OSS-v1-RC-RELEASE-NOTES.md) | Historical RC snapshot — not current flag/KPI truth |
+| [Known Limitations](./release/KNOWN-LIMITATIONS.md) | Current gaps: route bundle persist `intent_only`, scale, DATABASE_QUERY PostgreSQL-only; SMTP delivery is implemented (default off) |
+| [OSS v1.0 GA Checklist](./release/OSS-v1.0-GA-CHECKLIST.md) | Historical GA verification checklist |
 | [Production Checklist](./release/production-checklist.md) | Go-live security and operations |
 | [Installation Validation](./release/installation-validation.md) | Post-install verification steps |
 | [Release Readiness Audit](./release/release-readiness-audit.md) | M20.4 OSS surface audit |
@@ -34,12 +36,13 @@
 
 | Document | Description |
 |----------|-------------|
-| [Master Design](./master-design.md) | Authoritative architecture reference |
-| [Route Processing Persist Roadmap](./architecture/route-processing-persist-roadmap.md) | v1.x route bundle persist backlog |
+| [Source of Truth Index](./architecture/source-of-truth-index.md) | Current vs superseded vs archive |
+| [OSS v1 Architecture](./architecture/OSS-v1-ARCHITECTURE.md) | Current OSS mental model |
+| [Route Processing Persist Roadmap](./architecture/route-processing-persist-roadmap.md) | Persist kinds and remaining gaps |
 | [Route Processing UX Spec](./ux/DATA-RELAY-ROUTE-PROCESSING-UX-SPEC.md) | Inherit/override UX contract |
-| [M13 Route Processing Deferral](./architecture/m13-route-processing-ui-deferral.md) | OSS v1 deferral baseline |
 | [Runtime Capability Matrix](./runtime/runtime-capability-matrix.md) | Feature availability matrix |
-| [Schema Drift Runtime Spec](./ux/DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md) | Schema drift policy behavior |
+| [Schema Drift Runtime Spec](./ux/DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md) | Schema drift policy behavior (Stream scope) |
+| [Master Design](./master-design.md) | SUPERSEDED historical design |
 
 ---
 
@@ -71,9 +74,9 @@
 | Document | Description |
 |----------|-------------|
 | [Route Processing UX Spec](./ux/DATA-RELAY-ROUTE-PROCESSING-UX-SPEC.md) | Full UX spec (wizard, route edit, effective status) |
-| [Route Persist Roadmap](./architecture/route-processing-persist-roadmap.md) | Known persist gaps and v1.x MVP scope |
-| [Route Architecture Gap Analysis](./architecture/route-architecture-gap-analysis.md) | Historical gap analysis |
+| [Route Persist Roadmap](./architecture/route-processing-persist-roadmap.md) | Persist kinds and remaining gaps |
 | Specs 091–097 | `../specs/091-route-processing-architecture/` through `097-route-processing-ux/` |
+| Historical M13 audits | [`docs/archive/historical-audits/`](./archive/historical-audits/) (SUPERSEDED) |
 
 ---
 
@@ -134,4 +137,4 @@ Example JSON configurations: [`../samples/`](../samples/)
 
 ---
 
-*Data Relay OSS v1.0 GA — Documentation index. Last updated: 2026-06-20.*
+*Data Relay OSS v1.0 GA — Documentation index. Last updated: 2026-08-13 (P1-3 Source of Truth alignment).*

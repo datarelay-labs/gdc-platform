@@ -1,9 +1,13 @@
 # Data Relay OSS v1.0 GA — Release Notes
 
-**Release:** OSS v1.0 GA  
-**Branch:** `feature/sensitive-detection-m5-clean`  
-**Date:** 2026-06-20  
-**Prior release:** [OSS v1 RC Release Notes](./OSS-v1-RC-RELEASE-NOTES.md)  
+**Status:** HISTORICAL GA SNAPSHOT (2026-06-20) — do not treat Known Gaps or env defaults below as current product truth.
+**Current defaults:** Route Processing ON (`GDC_ROUTE_PROCESSING_ENABLED=true`); Schema Drift fleet count = confirmed open `StreamSchemaFieldDrift` (Runtime Snapshot); SMTP operational email delivery implemented (`SmtpEmailSender`; default `SMTP_ENABLED=false` skips send). Slack remains planned.
+**Current reading order:** [`source-of-truth-index.md`](../architecture/source-of-truth-index.md), [`KNOWN-LIMITATIONS.md`](./KNOWN-LIMITATIONS.md), [`OSS-v1-ARCHITECTURE.md`](../architecture/OSS-v1-ARCHITECTURE.md)
+
+**Release:** OSS v1.0 GA
+**Branch:** `feature/sensitive-detection-m5-clean`
+**Date:** 2026-06-20
+**Prior release:** [OSS v1 RC Release Notes](./OSS-v1-RC-RELEASE-NOTES.md)
 **Stabilization audit:** GO WITH KNOWN GAPS (2026-06-20)
 
 ---

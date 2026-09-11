@@ -12,12 +12,24 @@ import { normalizeWizardEnrichmentRules } from './enrichment-rules-model'
 import {
   readAdvancedStreamConfigFromPersisted,
 } from './wizard-stream-config-sync'
+import { loadWizardPolicyFromRuntime } from './wizard-policy-persist'
+import { loadWizardRouteTransforms } from './wizard-transform-persist'
+import { loadWizardRouteProtection } from './wizard-route-protection-persist'
+import { loadWizardRouteClassification } from './wizard-classification-persist'
+import { loadWizardFailover } from './wizard-failover-persist'
+import { unionSchemaFromStreamConfig } from '../../../utils/unionSchema'
 import {
   buildInitialState,
   DEFAULT_ROUTE_PROCESSING_INHERIT,
+  newWizardRouteClassificationOverrideKey,
+  newWizardRouteProtectionOverrideKey,
+  normalizeWizardClassificationLevel,
   normalizeWizardDestinations,
+  normalizeWizardPolicyDeliveryBehavior,
+  normalizeWizardProtectionAction,
   wizardConnectorPatchFromApi,
   type StreamConfigHeaderRow,
+  type WizardDataProtectionState,
   type WizardMappingRow,
   type WizardRouteDraft,
   type WizardState,
@@ -175,6 +187,119 @@ export function buildWizardDestinationsFromRouteSources(
   })
 }
 
+type GovernanceRouteOverrideLike = {
+  route_id?: number
+  enabled?: boolean
+  classification_level?: string | null
+  delivery_behavior?: string | null
+  protection_action?: string | null
+  field_path?: string | null
+}
+
+export function governanceRouteOverridesFromStreamConfig(configJson: unknown): GovernanceRouteOverrideLike[] {
+  if (!configJson || typeof configJson !== 'object' || Array.isArray(configJson)) return []
+  const governance = (configJson as { governance?: unknown }).governance
+  if (!governance || typeof governance !== 'object' || Array.isArray(governance)) return []
+  const raw = (governance as { route_overrides?: unknown }).route_overrides
+  if (!Array.isArray(raw)) return []
+  return raw.filter((item): item is GovernanceRouteOverrideLike => !!item && typeof item === 'object')
+}
+
+/** Restore inherit/override flags from persisted Contract v1 governance route_overrides. */
+export function applyGovernanceRouteOverridesToWizard(
+  destinations: WizardState['destinations'],
+  dataProtection: WizardDataProtectionState,
+  overrides: readonly GovernanceRouteOverrideLike[],
+): { destinations: WizardState['destinations']; dataProtection: WizardDataProtectionState } {
+  if (overrides.length === 0) {
+    return { destinations, dataProtection }
+  }
+
+  const routeDrafts = destinations.routeDrafts.map((draft) => ({
+    ...draft,
+    inherit: { ...draft.inherit },
+    overrides: draft.overrides ? { ...draft.overrides } : undefined,
+  }))
+  const classification = [...dataProtection.routeClassificationOverrides]
+  const protection = [...dataProtection.routeOverrides]
+
+  for (const override of overrides) {
+    if (override.enabled === false) continue
+    const routeId = Number(override.route_id)
+    if (!Number.isFinite(routeId)) continue
+    const draft = routeDrafts.find((item) => item.key === `route-${routeId}`)
+    if (!draft) continue
+
+    if (override.classification_level) {
+      draft.inherit.classification = false
+      if (!classification.some((row) => row.enabled && row.routeDraftKey === draft.key)) {
+        classification.push({
+          key: newWizardRouteClassificationOverrideKey(),
+          routeDraftKey: draft.key,
+          classificationLevel: normalizeWizardClassificationLevel(override.classification_level),
+          enabled: true,
+        })
+      }
+    }
+
+    if (override.delivery_behavior) {
+      draft.inherit.policy = false
+      draft.overrides = {
+        ...draft.overrides,
+        policy: { deliveryBehavior: normalizeWizardPolicyDeliveryBehavior(override.delivery_behavior) },
+      }
+    }
+
+    if (override.protection_action && override.field_path) {
+      if (!protection.some((row) => row.enabled && row.routeDraftKey === draft.key && row.fieldPath === override.field_path)) {
+        protection.push({
+          key: newWizardRouteProtectionOverrideKey(),
+          fieldPath: override.field_path,
+          routeDraftKey: draft.key,
+          protectionAction: normalizeWizardProtectionAction(override.protection_action),
+          deliveryBehavior:
+            override.delivery_behavior === 'quarantine' || override.delivery_behavior === 'block'
+              ? override.delivery_behavior
+              : 'continue',
+          enabled: true,
+        })
+      }
+    }
+  }
+
+  return {
+    destinations: { ...destinations, routeDrafts },
+    dataProtection: {
+      ...dataProtection,
+      routeClassificationOverrides: classification,
+      routeOverrides: protection,
+    },
+  }
+}
+
+/** Keep inherit/override drafts when destination rows are refreshed from the API. */
+export function preserveWizardRouteProcessingDrafts(
+  next: WizardState['destinations'],
+  prior: WizardState['destinations'] | undefined,
+): WizardState['destinations'] {
+  if (!prior?.routeDrafts.length) return next
+  const priorByKey = new Map(prior.routeDrafts.map((draft) => [draft.key, draft]))
+  const priorByDestination = new Map(prior.routeDrafts.map((draft) => [draft.destinationId, draft]))
+  return {
+    ...next,
+    routeDrafts: next.routeDrafts.map((draft) => {
+      const previous = priorByKey.get(draft.key) ?? priorByDestination.get(draft.destinationId)
+      if (!previous) return draft
+      return {
+        ...draft,
+        inherit: { ...previous.inherit },
+        overrides: previous.overrides,
+        failover: previous.failover,
+      }
+    }),
+  }
+}
+
 export type WizardDestinationsRefresh = {
   destinations: WizardState['destinations']
   routeIds: number[]
@@ -192,13 +317,20 @@ export async function refreshWizardDestinationsFromStream(streamId: number): Pro
     streamRoutes,
     destinations ?? [],
   )
-  const routeIds = merged.routeDrafts
+  let routeDrafts = merged.routeDrafts
+  try {
+    routeDrafts = await loadWizardFailover(streamId, routeDrafts)
+  } catch {
+    // Keep route drafts when failover-routes fetch is unavailable.
+  }
+  const destinationsState = { ...merged, routeDrafts }
+  const routeIds = destinationsState.routeDrafts
     .map((draft) => Number(/^route-(\d+)$/.exec(draft.key)?.[1] ?? NaN))
     .filter((id): id is number => Number.isFinite(id))
-  return { destinations: merged, routeIds }
+  return { destinations: destinationsState, routeIds }
 }
 
-function streamConfigPatchFromRead(
+export function streamConfigPatchFromRead(
   found: StreamRead,
   mapping: MappingUIConfigResponse | null,
 ): Partial<WizardState['stream']> {
@@ -213,6 +345,8 @@ function streamConfigPatchFromRead(
       ? methodRaw
       : 'GET'
   const endpoint = resolveStreamEndpointPath(cfg, sourceConfig)
+  const sqlQuery = String(cfg.query ?? (sourceConfig as { query?: unknown }).query ?? '').trim()
+  const queryTimeoutRaw = cfg.query_timeout_seconds ?? (sourceConfig as { query_timeout_seconds?: unknown }).query_timeout_seconds
   const body = cfg.body ?? cfg.request_body
   let requestBody = ''
   if (typeof body === 'string') requestBody = body
@@ -247,11 +381,14 @@ function streamConfigPatchFromRead(
     pollingIntervalSec:
       typeof found.polling_interval === 'number' && found.polling_interval > 0 ? found.polling_interval : 60,
     timeoutSec:
-      typeof cfg.timeout_seconds === 'number'
-        ? cfg.timeout_seconds
-        : typeof cfg.timeout_sec === 'number'
-          ? cfg.timeout_sec
-          : 30,
+      typeof queryTimeoutRaw === 'number' && Number.isFinite(queryTimeoutRaw)
+        ? queryTimeoutRaw
+        : typeof cfg.timeout_seconds === 'number'
+          ? cfg.timeout_seconds
+          : typeof cfg.timeout_sec === 'number'
+            ? cfg.timeout_sec
+            : 30,
+    sqlQuery,
     eventArrayPath: advanced.eventArrayPath ?? eventArrayPath,
     eventRootPath: advanced.eventRootPath ?? eventRootPath,
     useWholeResponseAsEvent,
@@ -287,11 +424,17 @@ export async function hydrateWizardStateFromStream(streamId: number): Promise<Wi
   if (!found) return null
 
   const streamRoutes = (allRoutes ?? []).filter((route) => route.stream_id === streamId)
-  const hydratedDestinations = buildWizardDestinationsFromRouteSources(
+  const baseDestinations = buildWizardDestinationsFromRouteSources(
     mapping?.routes ?? [],
     streamRoutes,
     destinations ?? [],
   )
+  const appliedGovernance = applyGovernanceRouteOverridesToWizard(
+    baseDestinations,
+    buildInitialState().dataProtection,
+    governanceRouteOverridesFromStreamConfig(found.config_json),
+  )
+  const hydratedDestinations = appliedGovernance.destinations
   const hydratedRouteIds = hydratedDestinations.routeDrafts
     .map((draft) => Number(/^route-(\d+)$/.exec(draft.key)?.[1] ?? NaN))
     .filter((id): id is number => Number.isFinite(id))
@@ -327,6 +470,48 @@ export async function hydrateWizardStateFromStream(streamId: number): Promise<Wi
   const unmappedPolicyRaw = fieldMappings[UNMAPPED_FIELDS_POLICY_KEY]
   const unmappedFieldsPolicy = unmappedPolicyRaw === 'drop_unmapped' ? 'drop_unmapped' : 'pass_through'
 
+  let hydratedRouteDestinations = hydratedDestinations
+  let dataPolicy = base.dataPolicy
+  try {
+    const loadedPolicy = await loadWizardPolicyFromRuntime(
+      streamId,
+      hydratedRouteDestinations.routeDrafts,
+      dataPolicy,
+    )
+    dataPolicy = loadedPolicy.dataPolicy
+    hydratedRouteDestinations = { ...hydratedRouteDestinations, routeDrafts: loadedPolicy.routeDrafts }
+  } catch {
+    // Keep governance-hydrated drafts when policy-rule fetch is unavailable.
+  }
+
+  try {
+    const loadedTransforms = await loadWizardRouteTransforms(hydratedRouteDestinations.routeDrafts)
+    hydratedRouteDestinations = { ...hydratedRouteDestinations, routeDrafts: loadedTransforms }
+  } catch {
+    // Keep drafts when route transform fetch is unavailable.
+  }
+
+  try {
+    const loadedProtection = await loadWizardRouteProtection(hydratedRouteDestinations.routeDrafts)
+    hydratedRouteDestinations = { ...hydratedRouteDestinations, routeDrafts: loadedProtection }
+  } catch {
+    // Keep drafts when route protection fetch is unavailable.
+  }
+
+  try {
+    const loadedClassification = await loadWizardRouteClassification(hydratedRouteDestinations.routeDrafts)
+    hydratedRouteDestinations = { ...hydratedRouteDestinations, routeDrafts: loadedClassification }
+  } catch {
+    // Keep drafts when route classification fetch is unavailable.
+  }
+
+  try {
+    const loadedFailover = await loadWizardFailover(streamId, hydratedRouteDestinations.routeDrafts)
+    hydratedRouteDestinations = { ...hydratedRouteDestinations, routeDrafts: loadedFailover }
+  } catch {
+    // Keep drafts when failover-routes fetch is unavailable.
+  }
+
   return {
     ...base,
     connector: {
@@ -334,6 +519,7 @@ export async function hydrateWizardStateFromStream(streamId: number): Promise<Wi
       ...connectorPatch,
       sourceType:
         (mapping?.source_type as WizardState['connector']['sourceType']) ??
+        (found.stream_type as WizardState['connector']['sourceType']) ??
         connectorPatch.sourceType ??
         base.connector.sourceType,
     },
@@ -347,7 +533,17 @@ export async function hydrateWizardStateFromStream(streamId: number): Promise<Wi
     fullEventRegexConfigJson,
     unmappedFieldsPolicy,
     enrichment: normalizeWizardEnrichmentRules(mapping?.enrichment?.enrichment),
-    destinations: hydratedDestinations,
+    destinations: hydratedRouteDestinations,
+    dataPolicy,
+    dataProtection: appliedGovernance.dataProtection,
+    apiTest: {
+      ...base.apiTest,
+      unionSchema: unionSchemaFromStreamConfig(
+        found.config_json && typeof found.config_json === 'object' && !Array.isArray(found.config_json)
+          ? (found.config_json as Record<string, unknown>)
+          : null,
+      ),
+    },
     outcome: {
       streamId: found.id,
       routeId: hydratedRouteIds[0] ?? null,

@@ -10,6 +10,7 @@
 #     databases gdc (API/lab) + gdc_pytest (host pytest only)
 #   PostgreSQL ontology pytest: 127.0.0.1:55440 → gdc_ontology_test (host pytest default; see tests/db_test_policy.py)
 #   WireMock:   127.0.0.1:28080
+#   Toxiproxy API / source / dest proxies: 127.0.0.1:28474 / 28081 / 28082
 #   Webhook echo: 127.0.0.1:18091
 #   TCP/UDP sink: 127.0.0.1:15514 (raw listener for isolation; pytest syslog E2E uses in-process receivers)
 #   TLS syslog sink: 127.0.0.1:16514 → container :6514 (self-signed dev cert; insecure_skip_verify in lab)
@@ -18,6 +19,15 @@
 #   SFTP fixture (REMOTE_FILE E2E): 127.0.0.1:22222
 
 name: gdc-platform-test
+
+# Shared logging + fixture resource caps.
+# WireMock memory matches docker-compose.platform.yml (512m/768m).
+# CPU/PID were previously unset on E2E paths; keep them modest and uniform.
+x-gdc-logging: &gdc-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "3"
 
 networks:
   gdc-dev-validation:
@@ -55,6 +65,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_POSTGRES_MEM_LIMIT:-2g}
+    memswap_limit: ${GDC_E2E_POSTGRES_MEMSWAP_LIMIT:-3g}
+    cpus: ${GDC_E2E_POSTGRES_CPUS:-1.0}
+    pids_limit: ${GDC_E2E_POSTGRES_PIDS_LIMIT:-512}
 
   postgres-ontology-test:
     # Host pytest default (tests/db_test_policy.py, .env.test.ontology): 127.0.0.1:55440/gdc_ontology_test
@@ -76,6 +91,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_POSTGRES_MEM_LIMIT:-2g}
+    memswap_limit: ${GDC_E2E_POSTGRES_MEMSWAP_LIMIT:-3g}
+    cpus: ${GDC_E2E_POSTGRES_CPUS:-1.0}
+    pids_limit: ${GDC_E2E_POSTGRES_PIDS_LIMIT:-512}
 
   wiremock-test:
     profiles: ["test", "dev-validation", "e2e"]
@@ -88,7 +108,33 @@ services:
       - "127.0.0.1:${GDC_TEST_WIREMOCK_HOST_PORT:-28080}:8080"
     volumes:
       - ./tests/wiremock:/home/wiremock
-    command: ["--verbose"]
+    # No --verbose: request/response dumps filled disks (100G+). Journal capped for admin API.
+    command: ["--max-request-journal-entries", "500"]
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_WIREMOCK_MEM_LIMIT:-512m}
+    memswap_limit: ${GDC_E2E_WIREMOCK_MEMSWAP_LIMIT:-768m}
+    cpus: ${GDC_E2E_WIREMOCK_CPUS:-1.0}
+    pids_limit: ${GDC_E2E_WIREMOCK_PIDS_LIMIT:-512}
+
+  # TCP-level fault injection in front of WireMock (HTTP source + webhook dest).
+  # Proxies are created at runtime via the Toxiproxy API (see tests/e2e_toxiproxy_helpers.py).
+  # Upstream defaults to {GDC_TEST_CONTAINER_PREFIX}-wiremock-test:8080 on this network.
+  toxiproxy-test:
+    profiles: ["test", "dev-validation", "e2e"]
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    container_name: ${GDC_TEST_CONTAINER_PREFIX:-gdc}-toxiproxy-test
+    networks:
+      - gdc-dev-validation
+    ports:
+      - "127.0.0.1:${GDC_TEST_TOXIPROXY_API_HOST_PORT:-28474}:8474"
+      - "127.0.0.1:${GDC_TEST_TOXIPROXY_SOURCE_HOST_PORT:-28081}:18080"
+      - "127.0.0.1:${GDC_TEST_TOXIPROXY_DEST_HOST_PORT:-28082}:18081"
+    # Distroless image: readiness is probed from the host (scripts/tests) via :8474/version.
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_LIGHT_MEM_LIMIT:-256m}
+    memswap_limit: ${GDC_E2E_LIGHT_MEMSWAP_LIMIT:-384m}
+    cpus: ${GDC_E2E_LIGHT_CPUS:-0.5}
+    pids_limit: ${GDC_E2E_LIGHT_PIDS_LIMIT:-256}
 
   webhook-receiver-test:
     profiles: ["test", "dev-validation", "e2e"]
@@ -100,6 +146,11 @@ services:
       - "127.0.0.1:${GDC_TEST_WEBHOOK_ECHO_HOST_PORT:-18091}:8080"
     environment:
       HTTP_PORT: "8080"
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_LIGHT_MEM_LIMIT:-256m}
+    memswap_limit: ${GDC_E2E_LIGHT_MEMSWAP_LIMIT:-384m}
+    cpus: ${GDC_E2E_LIGHT_CPUS:-0.5}
+    pids_limit: ${GDC_E2E_LIGHT_PIDS_LIMIT:-256}
 
   syslog-test:
     profiles: ["test", "dev-validation", "e2e"]
@@ -114,6 +165,11 @@ services:
       - "127.0.0.1:${GDC_TEST_SYSLOG_HOST_PORT:-15514}:5514/tcp"
       - "127.0.0.1:${GDC_TEST_SYSLOG_HOST_PORT:-15514}:5514/udp"
       - "127.0.0.1:${GDC_TEST_SYSLOG_TLS_HOST_PORT:-16514}:6514/tcp"
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_LIGHT_MEM_LIMIT:-256m}
+    memswap_limit: ${GDC_E2E_LIGHT_MEMSWAP_LIMIT:-384m}
+    cpus: ${GDC_E2E_LIGHT_CPUS:-0.5}
+    pids_limit: ${GDC_E2E_LIGHT_PIDS_LIMIT:-256}
 
   # --- Optional dev-validation-only fixtures (S3 / DATABASE_QUERY / REMOTE_FILE_POLLING lab) ---
   minio-test:
@@ -131,6 +187,11 @@ services:
       MINIO_ROOT_PASSWORD: gdcminioaccesssecret12
     volumes:
       - gdc_minio_test_data:/data
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_MINIO_MEM_LIMIT:-512m}
+    memswap_limit: ${GDC_E2E_MINIO_MEMSWAP_LIMIT:-768m}
+    cpus: ${GDC_E2E_MINIO_CPUS:-1.0}
+    pids_limit: ${GDC_E2E_MINIO_PIDS_LIMIT:-512}
 
   postgres-query-test:
     profiles: ["test", "dev-validation", "e2e"]
@@ -151,6 +212,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_POSTGRES_MEM_LIMIT:-2g}
+    memswap_limit: ${GDC_E2E_POSTGRES_MEMSWAP_LIMIT:-3g}
+    cpus: ${GDC_E2E_POSTGRES_CPUS:-1.0}
+    pids_limit: ${GDC_E2E_POSTGRES_PIDS_LIMIT:-512}
 
   mysql-query-test:
     profiles: ["dev-validation"]
@@ -173,6 +239,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_POSTGRES_MEM_LIMIT:-2g}
+    memswap_limit: ${GDC_E2E_POSTGRES_MEMSWAP_LIMIT:-3g}
+    cpus: ${GDC_E2E_POSTGRES_CPUS:-1.0}
+    pids_limit: ${GDC_E2E_POSTGRES_PIDS_LIMIT:-512}
 
   mariadb-query-test:
     profiles: ["dev-validation"]
@@ -194,6 +265,11 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_POSTGRES_MEM_LIMIT:-2g}
+    memswap_limit: ${GDC_E2E_POSTGRES_MEMSWAP_LIMIT:-3g}
+    cpus: ${GDC_E2E_POSTGRES_CPUS:-1.0}
+    pids_limit: ${GDC_E2E_POSTGRES_PIDS_LIMIT:-512}
 
   sftp-test:
     profiles: ["test", "dev-validation", "e2e"]
@@ -206,6 +282,11 @@ services:
     volumes:
       - gdc_sftp_test_data:/home/gdc/upload
     command: ["gdc:devlab123:1001:1001:upload"]
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_LIGHT_MEM_LIMIT:-256m}
+    memswap_limit: ${GDC_E2E_LIGHT_MEMSWAP_LIMIT:-384m}
+    cpus: ${GDC_E2E_LIGHT_CPUS:-0.5}
+    pids_limit: ${GDC_E2E_LIGHT_PIDS_LIMIT:-256}
 
   ssh-scp-test:
     profiles: ["dev-validation"]
@@ -218,6 +299,11 @@ services:
     volumes:
       - gdc_ssh_scp_test_data:/home/gdc2/upload
     command: ["gdc2:devlab456:1002:1002:upload"]
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_LIGHT_MEM_LIMIT:-256m}
+    memswap_limit: ${GDC_E2E_LIGHT_MEMSWAP_LIMIT:-384m}
+    cpus: ${GDC_E2E_LIGHT_CPUS:-0.5}
+    pids_limit: ${GDC_E2E_LIGHT_PIDS_LIMIT:-256}
 
   pytest-runner:
     profiles: ["test"]
@@ -241,3 +327,8 @@ services:
       wiremock-test:
         condition: service_started
     tty: true
+    logging: *gdc-logging
+    mem_limit: ${GDC_E2E_PYTEST_MEM_LIMIT:-2g}
+    memswap_limit: ${GDC_E2E_PYTEST_MEMSWAP_LIMIT:-3g}
+    cpus: ${GDC_E2E_PYTEST_CPUS:-2.0}
+    pids_limit: ${GDC_E2E_PYTEST_PIDS_LIMIT:-1024}

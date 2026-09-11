@@ -347,7 +347,10 @@ function SchemaDriftPolicyOptionGroup<T extends string>({
 export function StepDataProtection({ state, onChange, section = 'full' }: StepDataProtectionProps) {
   const candidates = useMemo(() => collectWizardDetectedFieldCandidates(state), [state])
   const likelySensitive = useMemo(() => suggestLikelySensitiveFieldsFromState(state), [state])
-  const preview = useMemo(() => buildDataProtectionPersistPreview(state.dataProtection), [state.dataProtection])
+  const preview = useMemo(
+    () => buildDataProtectionPersistPreview(state.dataProtection, state.apiTest.unionSchema),
+    [state.dataProtection, state.apiTest.unionSchema],
+  )
 
   const updateIntent = (key: string, patch: Partial<WizardDataProtectionIntent>) => {
     onChange({
@@ -497,7 +500,7 @@ export function StepDataProtection({ state, onChange, section = 'full' }: StepDa
             </div>
             {state.dataProtection.intents.map((intent) => {
               const sensitivityClass = intent.detectedField.trim()
-                ? inferWizardSensitivityClass(intent.detectedField)
+                ? inferWizardSensitivityClass(intent.detectedField, state.apiTest.unionSchema)
                 : null
               const normalizedField = normalizeWizardDetectedField(intent.detectedField)
               const pathKnown =

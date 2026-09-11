@@ -33,8 +33,10 @@ jobs:
       - name: Start WireMock
         run: |
           docker run -d --name wiremock -p 18080:8080 \
+            --memory=512m --memory-swap=768m --cpus=1.0 --pids-limit=512 \
+            --log-driver=json-file --log-opt max-size=20m --log-opt max-file=3 \
             -v "${GITHUB_WORKSPACE}/tests/wiremock:/home/wiremock" \
-            wiremock/wiremock:3.9.1 --verbose
+            wiremock/wiremock:3.9.1 --max-request-journal-entries 500
           for i in $(seq 1 40); do
             if curl -sf "http://127.0.0.1:18080/__admin/mappings" >/dev/null; then
               echo "WireMock ready"

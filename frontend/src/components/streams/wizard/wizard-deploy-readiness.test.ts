@@ -149,6 +149,43 @@ describe('computeDeployReadiness', () => {
     expect(snapshot.categories.find((c) => c.key === 'records')?.tone).toBe('err')
   })
 
+  it('blocks DATABASE_QUERY deploy when query sample has no records', () => {
+    const state = readyState()
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.sqlQuery = 'SELECT id, email, created_at FROM users'
+    state.stream.endpoint = ''
+    state.apiTest.ok = false
+    state.apiTest.eventCount = 0
+    state.apiTest.extractedEvents = []
+    state.apiTest.parsedJson = []
+    state.apiTest.unionSchema = null
+    state.apiTest.dbConnectivityPassed = true
+    state.apiTest.errorMessage =
+      'Connection succeeded. Query succeeded. Sample data is not available (no records). Union Schema was not generated.'
+    const snapshot = computeDeployReadiness(state, { ok: true, failed: false, unknown: false })
+    const data = snapshot.categories.find((c) => c.key === 'data')
+    expect(data?.tone).toBe('err')
+    expect(data?.summary).toMatch(/no records/i)
+    expect(snapshot.canCreate).toBe(false)
+  })
+
+  it('returns NEEDS ATTENTION when sample fetch has no records', () => {
+    const state = readyState()
+    state.apiTest.ok = false
+    state.apiTest.eventCount = 0
+    state.apiTest.extractedEvents = []
+    state.apiTest.parsedJson = []
+    state.apiTest.unionSchema = null
+    state.apiTest.errorMessage =
+      'Connection succeeded. Sample data is not available (no records). Union Schema was not generated.'
+    const snapshot = computeDeployReadiness(state)
+    const data = snapshot.categories.find((c) => c.key === 'data')
+    expect(data?.tone).toBe('err')
+    expect(data?.summary).toMatch(/no records/i)
+    expect(snapshot.canCreate).toBe(false)
+    expect(snapshot.status).toBe('needs_attention')
+  })
+
   it('returns NEEDS ATTENTION when latest API test failed', () => {
     const state = readyState()
     state.apiTest.status = 'error'
@@ -258,13 +295,13 @@ describe('computeRouteDeployReadiness', () => {
           {
             concern: 'transform',
             status: 'Overridden',
-            persistKind: 'intent_only',
+            persistKind: 'route_transform',
           },
         ],
       },
     ])
     expect(snapshot.routes[1]?.processing.transform).toBe('Overridden')
-    expect(snapshot.routes[1]?.intentOnlyConcerns).toContain('transform')
+    expect(snapshot.routes[1]?.intentOnlyConcerns).not.toContain('transform')
   })
 
   it('reports shared processing applied to all routes', () => {
@@ -301,5 +338,60 @@ describe('computeRouteDeployReadiness', () => {
     expect(routeProcessingStatusToDeployMode('Inherited')).toBe('shared')
     expect(routeProcessingStatusToDeployMode('Overridden')).toBe('override')
     expect(routeProcessingStatusToDeployMode('Mixed')).toBe('override')
+  })
+
+  it('blocks deploy when protection override has no persistable payload', () => {
+    const state = readyState()
+    state.destinations.routeDrafts[0] = {
+      ...state.destinations.routeDrafts[0]!,
+      inherit: { transform: true, protection: false, classification: true, policy: true },
+    }
+    const snapshot = computeDeployReadiness(state, { ok: true, failed: false, unknown: false })
+    expect(snapshot.canCreate).toBe(false)
+    expect(snapshot.status).toBe('needs_attention')
+    expect(snapshot.categories.find((c) => c.key === 'route_processing')?.tone).toBe('err')
+    const routeHealth = computeRouteDeployReadiness(state, destinations)
+    expect(routeHealth.routes[0]?.intentOnlyConcerns).toContain('protection')
+    expect(routeHealth.routes[0]?.status).toBe('error')
+  })
+
+  it('blocks deploy when classification override has no persistable payload', () => {
+    const state = readyState()
+    state.destinations.routeDrafts[0] = {
+      ...state.destinations.routeDrafts[0]!,
+      inherit: { transform: true, protection: true, classification: false, policy: true },
+    }
+    const snapshot = computeDeployReadiness(state, { ok: true, failed: false, unknown: false })
+    expect(snapshot.canCreate).toBe(false)
+    const routeHealth = computeRouteDeployReadiness(state, destinations)
+    expect(routeHealth.routes[0]?.intentOnlyConcerns).toContain('classification')
+    expect(routeHealth.routes[0]?.status).toBe('error')
+  })
+
+  it('allows deploy when protection override has route intents', () => {
+    const state = readyState()
+    state.destinations.routeDrafts[0] = {
+      ...state.destinations.routeDrafts[0]!,
+      inherit: { transform: true, protection: false, classification: true, policy: true },
+      overrides: {
+        protection: {
+          intents: [
+            {
+              key: 'i1',
+              detectedField: '$.email',
+              protectionAction: 'mask_full',
+              deliveryBehavior: 'continue',
+            },
+          ],
+          unknownNormalFieldPolicy: 'pass_through',
+          unknownSensitiveFieldPolicy: 'auto_protect',
+        },
+      },
+    }
+    const snapshot = computeDeployReadiness(state, { ok: true, failed: false, unknown: false })
+    expect(snapshot.canCreate).toBe(true)
+    const routeHealth = computeRouteDeployReadiness(state, destinations)
+    expect(routeHealth.routes[0]?.intentOnlyConcerns).not.toContain('protection')
+    expect(routeHealth.routes[0]?.status).toBe('ready')
   })
 })

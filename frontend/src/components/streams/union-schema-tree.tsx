@@ -150,9 +150,7 @@ function SchemaTreeNodeRow({
   const hasChildren = node.children.length > 0
   const field = node.field
   const rare = field ? isRareUnionField(field, schema) : false
-  const showSensitive = field
-    ? isUnionFieldSensitive(field.field_path, field.sample_values, field.field_type)
-    : false
+  const showSensitive = field ? isUnionFieldSensitive(field) : false
 
   if (!subtreeMatches(node, search)) return null
 
@@ -257,7 +255,7 @@ function GeneratedFieldNodeRow({
   onSelectPath?: (jsonPath: string) => void
 }) {
   const field = node.field
-  const showSensitive = isUnionFieldSensitive(field.field_path, field.sample_values, field.field_type)
+  const showSensitive = isUnionFieldSensitive(field)
   const selected = selectedPath === node.path
 
   if (!generatedNodeMatches(node, search)) return null

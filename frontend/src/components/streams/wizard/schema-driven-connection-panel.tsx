@@ -5,6 +5,7 @@ import { SchemaFormRenderer } from '../../connectors/schema-form/SchemaFormRende
 import { buildDefaultValues, normalizeAuthSchema } from '../../connectors/schema-form/schema-form-normalize'
 import { validateSchemaForm } from '../../connectors/schema-form/schema-form-validation'
 import type { SchemaFormValues } from '../../connectors/schema-form/schema-form-types'
+import { normalizeGdcStreamSourceType } from '../../../utils/sourceTypePresentation'
 import { mapConnectorApiAuthType, type WizardConnectorState } from './wizard-state'
 
 export type SchemaDrivenConnectionPanelProps = {
@@ -94,7 +95,7 @@ export function SchemaDrivenConnectionPanel({
       const merged = { ...defaults, ...values }
       onValuesChange(merged)
       onConnectorPatch({
-        sourceType: (resolved.source_type as WizardConnectorState['sourceType']) ?? 'HTTP_API_POLLING',
+        sourceType: normalizeGdcStreamSourceType(resolved.source_type),
         connectorName: resolved.name,
         ...mapSchemaValuesToConnector(merged, schema.type),
       })

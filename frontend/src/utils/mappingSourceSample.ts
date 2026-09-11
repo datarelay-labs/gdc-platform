@@ -7,6 +7,7 @@ import { wizardExtractEvents } from '../components/streams/wizard/wizard-json-ex
 import { buildStreamHttpConfigFromStreamRead, connectorBaseUrlFromMappingUi } from './streamHttpConfigFromStreamRead'
 import { normalizeGdcStreamSourceType, type GdcStreamSourceTypeKey } from './sourceTypePresentation'
 import { buildRepresentativeEventFromUnionSchema, unionSchemaFromExtractedEvents, unionSchemaFromStreamConfig, type UnionSchema } from './unionSchema'
+import { enrichUnionSchemaWithSensitiveSuggestions } from './unionSchemaSensitiveSuggestions'
 
 export type MappingSourceSampleResult = {
   ok: boolean
@@ -51,6 +52,14 @@ function applyPersistedUnionSchema(stream: StreamRead, result: MappingSourceSamp
     unionSchema: persisted,
     treeDocument: buildRepresentativeEventFromUnionSchema(persisted),
   }
+}
+
+async function withSensitiveSuggestions(
+  schema: UnionSchema | null,
+  events: Array<Record<string, unknown>>,
+): Promise<UnionSchema | null> {
+  if (!schema) return null
+  return enrichUnionSchemaWithSensitiveSuggestions(schema, events)
 }
 
 function pickWebhookSample(sourceConfig: Record<string, unknown>): unknown {
@@ -117,13 +126,14 @@ async function fetchViaHttpApiTest(
   if (dbRows?.length) {
     const rawPayload = dbRows
     const extracted = wizardExtractEvents(rawPayload, eventArrayPath, eventRootPath)
+    const unionSchema = await withSensitiveSuggestions(unionSchemaFromExtractedEvents(extracted), extracted)
     return {
       ok: true,
       sourceType,
       rawPayload,
       treeDocument: treeDocumentFromExtracted(extracted, rawPayload),
       extractedEvents: extracted,
-      unionSchema: unionSchemaFromExtractedEvents(extracted),
+      unionSchema,
       eventArrayPath,
       eventRootPath,
       sampleEventIndex: 0,
@@ -167,7 +177,7 @@ async function fetchViaHttpApiTest(
     rawPayload,
     treeDocument: treeDocumentFromExtracted(extracted, rawPayload),
     extractedEvents: extracted,
-    unionSchema: unionSchemaFromExtractedEvents(extracted),
+    unionSchema: await withSensitiveSuggestions(unionSchemaFromExtractedEvents(extracted), extracted),
     eventArrayPath,
     eventRootPath,
     sampleEventIndex: 0,
@@ -180,6 +190,7 @@ async function fetchViaHttpApiTest(
 /**
  * Load a source sample for Mapping UI using the same preview APIs as API Test / wizard.
  * Supports HTTP_API_POLLING, DATABASE_QUERY, S3_OBJECT_POLLING, REMOTE_FILE_POLLING, WEBHOOK_RECEIVER.
+ * Union Schema is built only from actual sample records — never from synthetic placeholders.
  */
 export async function fetchMappingSourceSample(streamId: number): Promise<MappingSourceSampleResult | null> {
   const [stream, cfg] = await Promise.all([fetchStreamById(streamId), fetchStreamMappingUiConfig(streamId)])
@@ -215,7 +226,7 @@ export async function fetchMappingSourceSample(streamId: number): Promise<Mappin
       rawPayload: sample,
       treeDocument: treeDocumentFromExtracted(extracted, sample),
       extractedEvents: extracted,
-      unionSchema: unionSchemaFromExtractedEvents(extracted),
+      unionSchema: await withSensitiveSuggestions(unionSchemaFromExtractedEvents(extracted), extracted),
       eventArrayPath,
       eventRootPath,
       sampleEventIndex: 0,
@@ -234,7 +245,7 @@ export async function fetchMappingSourceSample(streamId: number): Promise<Mappin
         rawPayload: null,
         treeDocument: {},
         extractedEvents: [],
-      unionSchema: null,
+        unionSchema: null,
         eventArrayPath,
         eventRootPath,
         sampleEventIndex: 0,
@@ -243,6 +254,71 @@ export async function fetchMappingSourceSample(streamId: number): Promise<Mappin
         fetchedAt,
       }
     }
+    const sample = await fetchViaHttpApiTest(stream, cfg, connectorId, eventArrayPath, eventRootPath)
+    if (!sample.ok) return applyPersistedUnionSchema(stream, sample)
+    if (sample.extractedEvents.length === 0) {
+      return applyPersistedUnionSchema(stream, {
+        ...sample,
+        ok: false,
+        unionSchema: null,
+        message:
+          'Connection succeeded. Sample data is not available (no records). Union Schema was not generated.',
+        recordsLabel: 'No records',
+      })
+    }
+    return applyPersistedUnionSchema(stream, sample)
+  }
+
+  if (sourceType === 'DATABASE_QUERY' && connectorId != null) {
+    const sc = cfg.source_config ?? {}
+    const streamCfg = (stream.config_json ?? {}) as Record<string, unknown>
+    const query = String(streamCfg.query ?? sc.query ?? '').trim()
+    if (!query) {
+      return {
+        ok: false,
+        sourceType,
+        rawPayload: null,
+        treeDocument: {},
+        extractedEvents: [],
+        unionSchema: null,
+        eventArrayPath,
+        eventRootPath,
+        sampleEventIndex: 0,
+        message: 'stream_config.query is required on the stream before fetching a database sample.',
+        recordsLabel: '—',
+        fetchedAt,
+      }
+    }
+    const probe = await runConnectorAuthTest({ connector_id: connectorId, method: 'GET', test_path: '/' })
+    if (!probe.ok) {
+      return {
+        ok: false,
+        sourceType,
+        rawPayload: null,
+        treeDocument: {},
+        extractedEvents: [],
+        unionSchema: null,
+        eventArrayPath,
+        eventRootPath,
+        sampleEventIndex: 0,
+        message: probe.message ?? 'Database connectivity probe failed',
+        recordsLabel: '—',
+        fetchedAt,
+      }
+    }
+    const sample = await fetchViaHttpApiTest(stream, cfg, connectorId, eventArrayPath, eventRootPath)
+    if (!sample.ok) return applyPersistedUnionSchema(stream, sample)
+    if (sample.extractedEvents.length === 0) {
+      return applyPersistedUnionSchema(stream, {
+        ...sample,
+        ok: false,
+        unionSchema: null,
+        message:
+          'Connection succeeded. Query succeeded. Sample data is not available (no records). Union Schema was not generated.',
+        recordsLabel: 'No records',
+      })
+    }
+    return applyPersistedUnionSchema(stream, sample)
   }
 
   if (sourceType === 'REMOTE_FILE_POLLING' && connectorId != null) {

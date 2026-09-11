@@ -1,20 +1,20 @@
 # Cross-Product Report
 
-Generated: 2026-07-17T10:03:28.224Z
+Generated: 2026-08-14T10:04:26.547Z
 
 ## Counts
 - Candidates (unique): 40428
 - Candidate emissions (raw): 42228
 - Duplicate emissions: 1800
-- Valid: 32184
-- NOT_APPLICABLE: 8244
+- Valid: 35484
+- NOT_APPLICABLE: 4944
 - NOT_IMPLEMENTED combinations: 0
 - Equation OK (C = V + NA + NI): true
-- Browser: 11970
+- Browser: 15270
 - API: 20214
 - route-off: 4818
-- route-on: 27366
-- combination_id_set_hash: `c890661d8b1cfe48a524468324fdcd2c7e1d8a1957a749ba6421beebbbe072fc`
+- route-on: 30666
+- combination_id_set_hash: `8285aec76000366b242ed98222eeea2b16afc3f3e2567ea6be32c4fec18ce6b6`
 
 ## NOT_IMPLEMENTED suite IDs (frozen 20)
 - auth__auth-destination-webhook-headers__status-partial
@@ -39,20 +39,20 @@ Generated: 2026-07-17T10:03:28.224Z
 - wizard__wizard-step-route-processing__partial
 
 ## By source
-- HTTP_API_POLLING: 20238
-- S3_OBJECT_POLLING: 2092
-- DATABASE_QUERY: 2092
-- REMOTE_FILE_POLLING: 2092
-- WEBHOOK_RECEIVER: 5670
+- HTTP_API_POLLING: 22218
+- S3_OBJECT_POLLING: 2312
+- DATABASE_QUERY: 2312
+- REMOTE_FILE_POLLING: 2312
+- WEBHOOK_RECEIVER: 6330
 
 ## By destination
-- WEBHOOK_POST: 6456
-- SYSLOG_UDP: 6396
-- SYSLOG_TCP: 6396
-- SYSLOG_TLS: 12936
+- WEBHOOK_POST: 7116
+- SYSLOG_UDP: 7056
+- SYSLOG_TCP: 7056
+- SYSLOG_TLS: 14256
 
 ## By fault
-- NONE: 28890
+- NONE: 32190
 - http_401: 270
 - http_403: 270
 - http_429: 270
@@ -70,8 +70,7 @@ Generated: 2026-07-17T10:03:28.224Z
 - sftp_unavailable: 30
 
 ## NA by rule
-- R019d_BROWSER_TRANSFORM_UI: 1650
-- R019f_BROWSER_ROUTE_OVERRIDE_UI: 4398
+- R019f_BROWSER_ROUTE_OVERRIDE_UI: 2748
 - R019g_BROWSER_FAULT_UI: 2196
 
 ## Shards

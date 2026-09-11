@@ -5,6 +5,9 @@ import * as gdcGovernanceDashboard from '../../api/gdcGovernanceDashboard'
 import * as gdcGovernancePolicies from '../../api/gdcGovernancePolicies'
 import * as gdcGovernanceViolations from '../../api/gdcGovernanceViolations'
 import * as gdcRuntimeHealth from '../../api/gdcRuntimeHealth'
+import * as operationalSnapshot from '../../api/operationalSnapshot'
+import type { OperationalSnapshotResponse } from '../../api/operationalSnapshot'
+import { NAV_PATH } from '../../config/nav-paths'
 import { GovernanceDashboardPage } from './governance-dashboard-page'
 
 const sampleSummary: gdcGovernanceDashboard.GovernanceDashboardSummaryResponse = {
@@ -73,6 +76,7 @@ describe('GovernanceDashboardPage', () => {
       ],
     })
     vi.spyOn(gdcRuntimeHealth, 'fetchHealthOverview').mockResolvedValue(null)
+    vi.spyOn(operationalSnapshot, 'getOperationalSnapshot').mockResolvedValue(null)
   })
 
   it('renders governance overview layout sections', async () => {
@@ -148,5 +152,54 @@ describe('GovernanceDashboardPage', () => {
     await waitFor(() => {
       expect(screen.getByTestId('dashboard-kpi-violations')).toHaveTextContent('7')
     })
+  })
+
+  it('shows Schema Drift from operational snapshot open counts and drills to streams filter', async () => {
+    const snapshot = {
+      global: {
+        health_status: 'HEALTHY',
+        total_streams: 3,
+        enabled_streams: 3,
+        running_streams: 3,
+        error_streams: 0,
+        total_routes: 0,
+        enabled_routes: 0,
+        total_destinations: 0,
+        enabled_destinations: 0,
+        total_eps_1m: 0,
+        total_eps_5m: 0,
+        avg_latency_ms: null,
+        last_activity_at: null,
+      },
+      streams: [
+        { stream_id: 1, stream_name: 'A', connector_id: 1, source_id: 1, enabled: true, status: 'RUNNING', health_status: 'HEALTHY', eps_1m: 1, eps_5m: 1, success_rate_5m: 100, failure_rate_5m: 0, avg_latency_ms: 1, route_count: 1, healthy_route_count: 1, failed_route_count: 0, last_success_at: null, last_error_at: null, last_error_message: null, checkpoint_updated_at: null, checkpoint_lag_seconds: null, open_schema_field_drift_count: 2 },
+        { stream_id: 2, stream_name: 'B', connector_id: 2, source_id: 2, enabled: true, status: 'RUNNING', health_status: 'HEALTHY', eps_1m: 1, eps_5m: 1, success_rate_5m: 100, failure_rate_5m: 0, avg_latency_ms: 1, route_count: 1, healthy_route_count: 1, failed_route_count: 0, last_success_at: null, last_error_at: null, last_error_message: null, checkpoint_updated_at: null, checkpoint_lag_seconds: null, open_schema_field_drift_count: 1 },
+        { stream_id: 3, stream_name: 'C', connector_id: 3, source_id: 3, enabled: true, status: 'RUNNING', health_status: 'HEALTHY', eps_1m: 1, eps_5m: 1, success_rate_5m: 100, failure_rate_5m: 0, avg_latency_ms: 1, route_count: 1, healthy_route_count: 1, failed_route_count: 0, last_success_at: null, last_error_at: null, last_error_message: null, checkpoint_updated_at: null, checkpoint_lag_seconds: null, open_schema_field_drift_count: 0 },
+      ],
+      routes: [],
+      destinations: [],
+      problems: [],
+      updated_at: '2026-08-14T00:00:00Z',
+    } satisfies OperationalSnapshotResponse
+    vi.spyOn(operationalSnapshot, 'getOperationalSnapshot').mockResolvedValue(snapshot)
+
+    render(
+      <MemoryRouter>
+        <GovernanceDashboardPage />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('gov-issue-schema-drift')).toHaveTextContent('3')
+    })
+    expect(screen.getByTestId('gov-issue-schema-drift').closest('a')).toHaveAttribute(
+      'href',
+      `${NAV_PATH.streams}?filter=schema-drift`,
+    )
+    expect(screen.getByTestId('gov-action-schema-drift')).toHaveAttribute(
+      'href',
+      `${NAV_PATH.streams}?filter=schema-drift`,
+    )
+    expect(screen.getByTestId('gov-action-schema-drift').getAttribute('href')).not.toContain('/validation')
   })
 })

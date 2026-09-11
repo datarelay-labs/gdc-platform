@@ -581,11 +581,13 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8")
 lines = text.splitlines()
 
-PLACEHOLDER_POSTGRES = {"change-me-strong-db-password"}
+PLACEHOLDER_POSTGRES = {"change-me-strong-db-password", "gdc"}
 PLACEHOLDER_GENERIC = {
     "change-me-in-production-use-long-random-string",
     "replace-with-fernet-or-aes-key-placeholder",
     "change-me-long-random-token",
+    "change-me-in-production",
+    "devtoken",
 }
 
 def parse_val(raw: str) -> str:

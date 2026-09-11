@@ -137,6 +137,8 @@ Governance is optional.
 
 Governance is NOT a default wizard step.
 
+Wizard step count is 5 (Destination First). See STREAM-WIZARD-UX-CHARTER v5.2.
+
 --------------------------------------------------
 
 User may activate Governance.

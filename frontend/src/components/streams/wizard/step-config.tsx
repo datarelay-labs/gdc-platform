@@ -33,6 +33,7 @@ export function StepConfig({ state, section = 'request', onChange }: StepConfigP
   const connector = state.connector
   const isS3 = connector.sourceType === 'S3_OBJECT_POLLING'
   const isRemote = connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = connector.sourceType === 'DATABASE_QUERY'
   const isWebhook = connector.sourceType === 'WEBHOOK_RECEIVER'
   const fullUrl = buildFullRequestUrl(connector.hostBaseUrl, c.endpoint)
   const mergedHeaders = effectiveRequestHeaders(connector, c)
@@ -102,6 +103,28 @@ export function StepConfig({ state, section = 'request', onChange }: StepConfigP
               className={inputCls}
             />
           </Field>
+        ) : isDb ? (
+          <div className="md:col-span-2">
+            <label
+              htmlFor="wizard-database-sql-query"
+              className="text-[11px] font-semibold text-slate-600 dark:text-gdc-mutedStrong"
+            >
+              SQL Query *
+            </label>
+            <p className="mt-1 text-[10px] text-slate-500 dark:text-gdc-muted">
+              SELECT-only query against the saved database connection. Sample rows use the existing preview limit; credentials stay on the connector.
+            </p>
+            <textarea
+              id="wizard-database-sql-query"
+              data-testid="wizard-database-sql-query"
+              value={c.sqlQuery}
+              onChange={(e) => onChange({ sqlQuery: e.target.value })}
+              rows={8}
+              aria-label="SQL Query"
+              placeholder="SELECT id, email, created_at FROM users"
+              className="mt-1 w-full rounded-md border border-slate-200/90 bg-white px-2 py-1.5 font-mono text-[12px] text-slate-900 dark:border-gdc-border dark:bg-gdc-card dark:text-slate-100"
+            />
+          </div>
         ) : isRemote ? (
           <>
             <Field label="Remote directory *">
@@ -173,7 +196,7 @@ export function StepConfig({ state, section = 'request', onChange }: StepConfigP
         )}
       </div>
 
-      {!isS3 && !isRemote && !isWebhook ? (
+      {!isS3 && !isRemote && !isDb && !isWebhook ? (
         <>
           <div className="mt-3 rounded-md border border-slate-200/80 bg-slate-50/70 p-2 dark:border-gdc-border dark:bg-gdc-card">
             <p className="text-[11px] font-semibold text-slate-800 dark:text-slate-200">Inherited Connector Headers</p>
@@ -295,6 +318,13 @@ export function StepConfig({ state, section = 'request', onChange }: StepConfigP
         <p className="mt-3 text-[11px] text-slate-600 dark:text-gdc-muted">
           S3 object polling uses the connector Source configuration. No HTTP request body is sent for this stream type.
         </p>
+      ) : isDb ? (
+        <div className="mt-3 rounded-md border border-slate-200/80 bg-slate-50/70 px-2.5 py-2 text-[11px] dark:border-gdc-border dark:bg-gdc-card">
+          <p className="font-semibold text-slate-700 dark:text-slate-200">Database query summary</p>
+          <p className="mt-1 font-mono text-[11px] text-slate-800 dark:text-slate-100">
+            {c.sqlQuery.trim() || '(set SQL query)'} · timeout {c.timeoutSec}s
+          </p>
+        </div>
       ) : isRemote ? (
         <div className="mt-3 rounded-md border border-slate-200/80 bg-slate-50/70 px-2.5 py-2 text-[11px] dark:border-gdc-border dark:bg-gdc-card">
           <p className="font-semibold text-slate-700 dark:text-slate-200">Remote file summary</p>
@@ -320,7 +350,7 @@ export function StepConfig({ state, section = 'request', onChange }: StepConfigP
                 className={inputCls}
               />
             </Field>
-            <Field label="Timeout (sec)">
+            <Field label={isDb ? 'Query timeout (sec)' : 'Timeout (sec)'}>
               <input
                 type="number"
                 min={1}

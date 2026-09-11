@@ -68,6 +68,14 @@ describe('PolicyEditorDrawer impact panel', () => {
     expect(screen.getAllByText(/Preview only — runtime enforcement not enabled/i).length).toBeGreaterThanOrEqual(1)
   })
 
+  it('does not offer AI Governance as a policy category', async () => {
+    render(
+      <PolicyEditorDrawer open policy={samplePolicy} onClose={() => {}} onSaved={() => {}} />,
+    )
+    const category = await screen.findByTestId('policy-editor-category')
+    expect(category).not.toHaveTextContent('AI Governance')
+  })
+
   it('shows empty impact state from API', async () => {
     const { previewPolicyImpact } = await import('../../api/gdcGovernancePolicies')
     vi.mocked(previewPolicyImpact).mockResolvedValueOnce({

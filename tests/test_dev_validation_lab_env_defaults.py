@@ -41,7 +41,17 @@ def test_apply_defaults_enables_slices_when_lab_on(monkeypatch: pytest.MonkeyPat
 
 def test_apply_defaults_skipped_in_production(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ENABLE_DEV_VALIDATION_S3", raising=False)
-    s = Settings(ENABLE_DEV_VALIDATION_LAB=True, APP_ENV="production")
+    s = Settings(
+        ENABLE_DEV_VALIDATION_LAB=True,
+        APP_ENV="production",
+        REQUIRE_AUTH=True,
+        AUTH_DEV_HEADER_TRUST=False,
+        JWT_SECRET_KEY="A" * 32,
+        SECRET_KEY="B" * 32,
+        ENCRYPTION_KEY="C" * 32,
+        GDC_PROXY_RELOAD_TOKEN="D" * 32,
+        DATABASE_URL="postgresql://gdc:strong-production-db-password-ok@postgres:5432/gdc",
+    )
     meta = apply_dev_validation_lab_env_defaults(s)
     assert meta["applied"] is False
     assert s.ENABLE_DEV_VALIDATION_S3 is False

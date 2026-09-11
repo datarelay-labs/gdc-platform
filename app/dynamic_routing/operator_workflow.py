@@ -12,6 +12,12 @@ from app.destinations.models import Destination
 from app.classification.levels import normalize_level
 from app.classification.models import CLASSIFICATION_LEVELS
 from app.dynamic_routing.models import StreamDynamicRoute
+from app.dynamic_routing.route_binding import (
+    AmbiguousDynamicRouteBindingError,
+    UnresolvedDynamicRouteBindingError,
+    resolve_existing_route,
+)
+from app.routes.models import Route
 from app.sensitive_detection.models import (
     SENSITIVITY_CLASS_PII,
     SENSITIVITY_CLASS_SECRET,
@@ -37,13 +43,23 @@ class DynamicRouteValidationError(Exception):
     pass
 
 
-def _rule_entry(rule: StreamDynamicRoute, *, destination_name: str | None = None) -> dict[str, Any]:
+def _rule_entry(
+    rule: StreamDynamicRoute,
+    *,
+    destination_name: str | None = None,
+    route_name: str | None = None,
+) -> dict[str, Any]:
+    bound_route_id = int(rule.route_id) if rule.route_id is not None else None
     return {
         "id": rule.id,
         "stream_id": rule.stream_id,
         "name": rule.name,
         "enabled": bool(rule.enabled),
         "condition_json": dict(rule.condition_json) if isinstance(rule.condition_json, dict) else {},
+        "route_id": bound_route_id,
+        "route_name": route_name
+        if route_name is not None
+        else (f"Route #{bound_route_id}" if bound_route_id else None),
         "destination_id": int(rule.destination_id),
         "destination_name": destination_name,
         "created_at": rule.created_at,
@@ -75,6 +91,26 @@ def _validate_destination(db: Session, destination_id: int) -> Destination:
     return dest
 
 
+def _bind_existing_route(
+    db: Session,
+    *,
+    stream_id: int,
+    route_id: int | None = None,
+    destination_id: int | None = None,
+) -> Route:
+    try:
+        return resolve_existing_route(
+            db,
+            stream_id=stream_id,
+            route_id=route_id,
+            destination_id=destination_id,
+        )
+    except UnresolvedDynamicRouteBindingError as exc:
+        raise DynamicRouteValidationError(str(exc)) from exc
+    except AmbiguousDynamicRouteBindingError as exc:
+        raise DynamicRouteValidationError(str(exc)) from exc
+
+
 def list_dynamic_routes(
     db: Session,
     stream_id: int,
@@ -90,7 +126,9 @@ def list_dynamic_routes(
     for rule in rules:
         dest = db.get(Destination, int(rule.destination_id))
         dest_name = str(dest.name) if dest is not None else None
-        out.append(_rule_entry(rule, destination_name=dest_name))
+        bound_route = db.get(Route, int(rule.route_id)) if rule.route_id is not None else None
+        route_name = f"Route #{int(bound_route.id)}" if bound_route is not None else None
+        out.append(_rule_entry(rule, destination_name=dest_name, route_name=route_name))
     return out
 
 
@@ -117,20 +155,28 @@ def create_dynamic_route(
     name: str,
     enabled: bool,
     condition_json: dict[str, Any],
-    destination_id: int,
+    destination_id: int | None = None,
+    route_id: int | None = None,
 ) -> StreamDynamicRoute:
     label = name.strip()
     if not label:
         raise DynamicRouteValidationError("name is required")
     _validate_condition_json(condition_json)
-    _validate_destination(db, destination_id)
+    bound = _bind_existing_route(
+        db,
+        stream_id=stream_id,
+        route_id=route_id,
+        destination_id=destination_id,
+    )
+    _validate_destination(db, int(bound.destination_id))
     now = datetime.now(timezone.utc)
     rule = StreamDynamicRoute(
         stream_id=stream_id,
         name=label,
         enabled=enabled,
         condition_json=dict(condition_json),
-        destination_id=int(destination_id),
+        route_id=int(bound.id),
+        destination_id=int(bound.destination_id),
         created_at=now,
         updated_at=now,
     )
@@ -148,6 +194,7 @@ def patch_dynamic_route(
     enabled: bool | None = None,
     condition_json: dict[str, Any] | None = None,
     destination_id: int | None = None,
+    target_route_id: int | None = None,
 ) -> StreamDynamicRoute:
     rule = db.get(StreamDynamicRoute, int(route_id))
     if rule is None or int(rule.stream_id) != int(stream_id):
@@ -162,9 +209,16 @@ def patch_dynamic_route(
     if condition_json is not None:
         _validate_condition_json(condition_json)
         rule.condition_json = dict(condition_json)
-    if destination_id is not None:
-        _validate_destination(db, destination_id)
-        rule.destination_id = int(destination_id)
+    if destination_id is not None or target_route_id is not None:
+        bound = _bind_existing_route(
+            db,
+            stream_id=stream_id,
+            route_id=target_route_id if target_route_id is not None else None,
+            destination_id=destination_id if destination_id is not None else None,
+        )
+        _validate_destination(db, int(bound.destination_id))
+        rule.route_id = int(bound.id)
+        rule.destination_id = int(bound.destination_id)
     rule.updated_at = datetime.now(timezone.utc)
     db.flush()
     return rule

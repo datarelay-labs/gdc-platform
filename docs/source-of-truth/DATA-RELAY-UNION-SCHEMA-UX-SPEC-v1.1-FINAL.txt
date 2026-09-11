@@ -8,7 +8,7 @@ Status: Implementation Ready
 
 # Purpose
 
-본 문서는 Stream Wizard의 Sample & Record Selection 단계에서 생성되는 Union Schema의 생성 규칙과 Transform 단계 표시 방식을 정의한다.
+본 문서는 Stream Wizard의 Sample & Record Selection 단계에서 생성되는 Union Schema의 생성 규칙과 Route Processing(Transform concern) 표시 방식을 정의한다.
 
 목적은 다음과 같다.
 

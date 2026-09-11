@@ -26,8 +26,8 @@ function GeneratedUnionFieldDetailPanel({
   field: UnionSchemaField
   rule: WizardEnrichmentRule
 }) {
-  const sensitive = isUnionFieldSensitive(field.field_path, field.sample_values, field.field_type)
-  const suggestedType = suggestUnionFieldTypeLabel(field.field_path, field.sample_values, field.field_type)
+  const sensitive = isUnionFieldSensitive(field)
+  const suggestedType = suggestUnionFieldTypeLabel(field)
   const samples = field.sample_values.slice(0, 5)
 
   return (

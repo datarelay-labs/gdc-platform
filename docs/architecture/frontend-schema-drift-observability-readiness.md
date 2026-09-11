@@ -1,5 +1,8 @@
 # Frontend Schema Drift Observability — Commit B1 Readiness
 
+**Status:** ARCHIVE_CANDIDATE (point-in-time readiness)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), [`DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md`](../ux/DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md)
+
 **Date:** 2026-06-17  
 **Branch:** `feature/sensitive-detection-m5-clean` (HEAD `e91515a` — Commit A on `origin`)  
 **Input:** `docs/architecture/frontend-schema-drift-observability-audit.md`  

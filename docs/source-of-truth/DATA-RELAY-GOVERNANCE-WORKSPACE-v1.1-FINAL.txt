@@ -739,13 +739,16 @@ Deploy shows governance summary.
 
 6.
 
-Wizard remains 6-step architecture.
+Wizard remains 5-step Destination First architecture
+(Connect → Sample & Record Selection → Destinations → Route Processing → Deploy).
 
 --------------------------------------------------
 
 7.
 
 No existing enrichment functionality breaks.
+
+Status note (P1-3): Wizard step count is 5-step Destination First. See STREAM-WIZARD-UX-CHARTER v5.2.
 
 ==================================================
 END OF DOCUMENT

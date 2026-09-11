@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, inspect as sa_inspect
 from sqlalchemy.orm import Session
 
 from app.checkpoints.repository import get_checkpoint_by_stream_id
@@ -20,7 +20,7 @@ from app.routes.models import Route
 from app.runtime.copy_utils import copy_json_value
 from app.runtime.stream_context import StreamContext
 from app.runners.stream_loader import load_stream_context
-from app.runners.stream_runner_db import run_with_db
+from app.runners.stream_runner_db import expunge_runtime_orm_graph, run_with_db
 from app.sources.models import Source
 from app.streams.repository import get_stream_by_id
 
@@ -165,6 +165,38 @@ def _load_fresh_checkpoint(db: Session, stream_id: int) -> dict[str, Any] | None
     }
 
 
+def _eager_load_column_attrs(obj: Any) -> None:
+    """Force-load mapped columns so a later Session.close() cannot expire them."""
+
+    if obj is None:
+        return
+    try:
+        insp = sa_inspect(obj)
+        mapper = getattr(insp, "mapper", None)
+        if mapper is None:
+            return
+        for attr in mapper.column_attrs:
+            getattr(obj, attr.key, None)
+    except Exception:
+        return
+
+
+def _prepare_context_for_cache(db: Session, context: StreamContext) -> None:
+    """Detach runtime ORM rows with columns already loaded (production uses short sessions)."""
+
+    runtime = context.stream if isinstance(context.stream, dict) else {}
+    candidates: list[Any] = [context.source, context.mapping, context.enrichment]
+    if isinstance(runtime, dict):
+        candidates.extend([runtime.get("mapping_row"), runtime.get("enrichment_row")])
+        for route in list(runtime.get("routes") or []):
+            if not isinstance(route, dict):
+                continue
+            candidates.extend([route.get("route_mapping_row"), route.get("route_enrichment_row")])
+    for obj in candidates:
+        _eager_load_column_attrs(obj)
+    expunge_runtime_orm_graph(db, context.stream, context)
+
+
 def _shell_from_context(context: StreamContext, fingerprint: str) -> _CachedShell:
     return _CachedShell(
         fingerprint=fingerprint,
@@ -237,7 +269,7 @@ def load_scheduler_stream_context(
                 latency_ms = max(0, int((time.monotonic() - started) * 1000))
                 _metrics.load_latency_ms_total += latency_ms
                 _metrics.load_count += 1
-                logger.info(
+                logger.debug(
                     "%s",
                     {
                         "stage": "scheduler_context_cache_hit",
@@ -258,6 +290,7 @@ def load_scheduler_stream_context(
         stream_row = get_stream_by_id(active, sid)
         ctx = load_stream_context(active, sid, preloaded_stream=stream_row)
         ctx.checkpoint = checkpoint
+        _prepare_context_for_cache(active, ctx)
         return ctx
 
     if db is not None:
@@ -272,7 +305,7 @@ def load_scheduler_stream_context(
         _metrics.load_latency_ms_total += latency_ms
         _metrics.load_count += 1
 
-    logger.info(
+    logger.debug(
         "%s",
         {
             "stage": "scheduler_context_cache_miss",

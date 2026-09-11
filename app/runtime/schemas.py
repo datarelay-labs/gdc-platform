@@ -1925,6 +1925,12 @@ class HttpApiTestResponse(BaseModel):
     remote_file_event_count: int | None = Field(
         default=None, description="REMOTE_FILE_POLLING sample fetch: extracted event count (capped)."
     )
+    s3_event_count: int | None = Field(
+        default=None, description="S3_OBJECT_POLLING sample fetch: parsed event count (capped)."
+    )
+    s3_sample_keys: list[str] | None = Field(
+        default=None, description="S3_OBJECT_POLLING sample fetch: object keys that produced events."
+    )
 
 
 class MappingPreviewRequest(BaseModel):
@@ -2092,6 +2098,28 @@ class TransformPreviewResponse(BaseModel):
     save_blocked: bool = False
     duration_ms: int = 0
     message: str = ""
+
+
+class SensitiveDetectionPreviewRequest(BaseModel):
+    """POST /runtime/preview/sensitive-detection — suggestion-only, no persist."""
+
+    events: list[dict[str, Any]] = Field(default_factory=list, max_length=500)
+
+
+class SensitiveSuggestionEntry(BaseModel):
+    field_path: str
+    suggested_sensitive_type: str
+    sensitivity_class: str
+    detection_method: str
+    matched_rule: str | None = None
+    detection_source: str = "sensitive_detection_engine"
+    confidence: str | None = None
+
+
+class SensitiveDetectionPreviewResponse(BaseModel):
+    suggestions: list[SensitiveSuggestionEntry] = Field(default_factory=list)
+    suggestion_count: int = 0
+    auto_protection_applied: bool = False
 
 
 class DeliveryFormatDraftPreviewRequest(BaseModel):

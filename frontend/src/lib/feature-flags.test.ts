@@ -40,8 +40,8 @@ describe('feature-flags AI Gateway Foundation', () => {
     expect(isAiGatewayFoundationEnabled()).toBe(false)
   })
 
-  it('enables AI Gateway foundation when flag true', () => {
+  it('keeps AI Gateway foundation off even when flag is true', () => {
     vi.stubEnv('VITE_AI_GATEWAY_FOUNDATION', 'true')
-    expect(isAiGatewayFoundationEnabled()).toBe(true)
+    expect(isAiGatewayFoundationEnabled()).toBe(false)
   })
 })

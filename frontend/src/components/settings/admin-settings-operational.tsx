@@ -699,7 +699,7 @@ export function AdminOperationalDashboard({ reloadToken, readOnly, busy, setBusy
               <p className={cn('text-[12px]', gdcUi.textMuted)}>
                 Webhook delivery is{' '}
                 <strong className="font-semibold text-emerald-700 dark:text-emerald-300">implemented</strong>{' '}
-                with cooldown / dedupe / history. Slack and email channels remain planned placeholders.
+                with cooldown / dedupe / history. Email uses platform SMTP when enabled. Slack remains a planned placeholder.
               </p>
             </div>
           </div>
@@ -1119,7 +1119,7 @@ export function AdminOperationalDashboard({ reloadToken, readOnly, busy, setBusy
                 placeholder="https://…"
               />
               <p className="text-[11px] text-slate-500 dark:text-gdc-muted">
-                Webhook delivery is implemented. Slack and email entries are persisted but delivery for those channels is planned.
+                Webhook delivery is implemented. Email uses platform SMTP when SMTP_ENABLED is configured. Slack remains planned.
               </p>
               <label className="block text-[11px] font-semibold uppercase text-slate-500 dark:text-gdc-muted">Slack incoming webhook (planned)</label>
               <input
@@ -1127,7 +1127,7 @@ export function AdminOperationalDashboard({ reloadToken, readOnly, busy, setBusy
                 value={alertDraft.slack_webhook_url ?? ''}
                 onChange={(e) => setAlertDraft({ ...alertDraft, slack_webhook_url: e.target.value })}
               />
-              <label className="block text-[11px] font-semibold uppercase text-slate-500 dark:text-gdc-muted">Email to (planned)</label>
+              <label className="block text-[11px] font-semibold uppercase text-slate-500 dark:text-gdc-muted">Email to</label>
               <input
                 className={cn('w-full', gdcUi.input)}
                 value={alertDraft.email_to ?? ''}

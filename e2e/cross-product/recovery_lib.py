@@ -199,9 +199,13 @@ HARNESS_SCOPE_REL_TO_COMPONENT = (
     ("e2e/cross-product/matrix/cross-product.spec.ts", "spec_hash"),
     ("e2e/cross-product/oracle.ts", "oracle_hash"),
     ("e2e/cross-product/collector-route-plan.ts", None),
+    ("e2e/cross-product/delivery-outcome.ts", None),
     ("e2e/cross-product/test-collector-route-plan.ts", None),
+    ("e2e/cross-product/test-delivery-outcome.ts", None),
+    ("e2e/framework/test-collector-message-key.ts", None),
     ("e2e/cross-product/fixtures/composite-chain-fixture.ts", "fixture_hash"),
     ("e2e/framework/test-context.ts", "test_context_hash"),
+    ("e2e/framework/resource-cleanup.ts", None),
     ("e2e/framework/lab-stability.ts", "lab_stability_hash"),
     ("e2e/cross-product/retry-policy.json", "retry_policy_hash"),
     ("e2e/cross-product/cross-product-loader.ts", "loader_hash"),
@@ -212,6 +216,10 @@ HARNESS_SCOPE_REL_TO_COMPONENT = (
     ("e2e/cross-product/cross-product-axes.yaml", "axes_source_hash"),
     ("e2e/cross-product/run-all-shards.sh", "run_all_shards_hash"),
     ("e2e/cross-product/recovery_lib.py", "recovery_lib_hash"),
+    ("e2e/cross-product/parallel_lib.py", "parallel_lib_hash"),
+    ("e2e/cross-product/parallel-matrix-coordinator.py", "parallel_coordinator_hash"),
+    ("e2e/cross-product/run-parallel-shard-worker.sh", "parallel_worker_hash"),
+    ("e2e/framework/connector-create-lock.ts", None),
 )
 
 

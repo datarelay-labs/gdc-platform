@@ -103,6 +103,8 @@ PLACEHOLDER = {
     "replace-with-fernet-or-aes-key-placeholder",
     "change-me-long-random-token",
     "change-me-in-production",
+    "devtoken",
+    "gdc",
 }
 
 def parse_val(raw: str) -> str:

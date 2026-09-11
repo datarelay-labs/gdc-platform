@@ -69,3 +69,19 @@ export async function createFailoverRoute(
     body: JSON.stringify(body),
   })
 }
+
+export async function patchFailoverRoute(
+  streamId: number,
+  routeId: number,
+  body: {
+    primary_destination_id?: number
+    secondary_destination_id?: number
+    enabled?: boolean
+  },
+): Promise<{ route: FailoverRoute } | null> {
+  return requestJson(`${RT}/streams/${streamId}/failover-routes/${routeId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}

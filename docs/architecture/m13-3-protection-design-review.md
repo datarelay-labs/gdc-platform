@@ -1,6 +1,9 @@
 # M13.3 Per Route Protection — Design Review
 
-**Status:** Design review only — no code, implementation, or migrations  
+**Status:** SUPERSEDED (historical design review)  
+**Superseded By:** [`specs/093-per-route-protection`](../../specs/093-per-route-protection/spec.md)
+
+Design review only — no code, implementation, or migrations  
 **Date:** 2026-06-14  
 **Scope:** M13.3 spec validation; compatibility with M13.4 (Classification), M13.5 (Policy), M13.6 (Route Runtime Delivery)  
 **Inputs:**

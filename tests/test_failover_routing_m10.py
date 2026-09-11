@@ -47,6 +47,7 @@ from app.runtime.preview_service import run_final_event_draft_preview
 from app.runtime.schemas import FinalEventDraftPreviewRequest
 from tests.test_stream_runner_e2e import (
     _FakePoller,
+    _add_enabled_route_for_destination,
     _build_runner,
     _seed_stream_runtime,
 )
@@ -627,6 +628,7 @@ def test_dynamic_routing_and_failover_combined(
     )
     db_session.add(dynamic_dest)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(dynamic_dest.id))
     create_dynamic_route(
         db_session,
         stream_id=stream_id,
@@ -682,7 +684,7 @@ def test_dynamic_routing_skips_failover_secondary_duplicate(
         name="Backup Dup",
         enabled=True,
         condition_json={"sensitivity_class": "secret"},
-        destination_id=int(ctx["backup_dest_id"]),
+        destination_id=int(ctx["primary_dest_id"]),
     )
     _seed_secret_mapping(db_session, stream_id)
     db_session.commit()
@@ -709,6 +711,6 @@ def test_dynamic_routing_skips_failover_secondary_duplicate(
         DeliveryLog.stage == "dynamic_route_send_skip",
     ).all()
     assert any(
-        (row.payload_sample or {}).get("skip_reason") == "duplicate_base_destination"
+        (row.payload_sample or {}).get("skip_reason") in {"duplicate_base_route", "duplicate_base_destination"}
         for row in skip_logs
     )

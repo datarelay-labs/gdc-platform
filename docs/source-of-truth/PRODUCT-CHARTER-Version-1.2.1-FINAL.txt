@@ -229,19 +229,6 @@ Governance
 - Audit
 - Notifications
 
---------------------------------------------------
-
-AI Gateway
-
-- AI Provider Connectivity
-- AI Request Routing
-- AI Response Routing
-- AI Stream
-- AI Traffic Monitoring
-- AI Policy Enforcement
-- AI Audit
-- AI Governance
-
 ==================================================
 Out Of Scope
 ==================================================
@@ -277,6 +264,33 @@ AI Platforms
 - LLM Hosting Platform
 - Model Training Platform
 - Vector Database Platform
+
+--------------------------------------------------
+
+AI Gateway / AI Proxy
+
+AI Gateway is not Data Relay OSS product scope.
+
+- AI Provider Connectivity
+- AI Stream
+- AI Proxy Receiver
+- AI Request/Response Routing
+- AI Traffic Monitoring
+- AI Policy Enforcement
+- AI Audit
+- AI Governance
+- AI-specific Failover / Replay exposure
+
+Shared Data Relay capabilities remain in scope:
+
+- Route
+- Failover
+- Replay
+- Protection
+- Classification
+- Policy
+- Audit
+- Governance
 
 --------------------------------------------------
 

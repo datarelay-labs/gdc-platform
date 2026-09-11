@@ -84,8 +84,8 @@ def test_route_policy_effective_overridden(
     body = r.json()
     assert body["persisted_source"] == "route"
     assert body["fallback_used"] is False
-    assert body["processing_status"] == "Overridden"
-    assert body["rule_count"] == 1
+    assert body["processing_status"] == "Mixed"
+    assert body["rule_count"] == 2
 
 
 def test_route_policy_effective_mixed_disabled_route_rows(

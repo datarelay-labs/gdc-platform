@@ -1,6 +1,11 @@
 # M13 Route Architecture Design Review
 
-**Status:** Design review only — no code, implementation, or migrations  
+**Status:** SUPERSEDED (historical design review)  
+**Superseded By:** [`specs/091-route-processing-architecture`](../../specs/091-route-processing-architecture/spec.md), [`source-of-truth-index.md`](source-of-truth-index.md)
+
+Do **not** treat “flag default OFF” in the tables below as the current product default (`GDC_ROUTE_PROCESSING_ENABLED=true` as of P1-4).
+
+Design review only — no code, implementation, or migrations  
 **Date:** 2026-06-14  
 **Scope:** M13.1 (implemented + spec), M13.2 (spec), compatibility with M13.3–M13.6  
 **Inputs:**

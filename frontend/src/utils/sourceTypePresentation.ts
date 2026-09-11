@@ -12,17 +12,55 @@ export const GDC_STREAM_SOURCE_TYPES = [
 
 export type GdcStreamSourceTypeKey = (typeof GDC_STREAM_SOURCE_TYPES)[number]
 
-/** Normalize UI / API stream or source type strings to a known presentation key. */
-export function normalizeGdcStreamSourceType(raw: string | null | undefined): GdcStreamSourceTypeKey {
-  const u = String(raw ?? '')
+/** Standalone Stream Test classifier — never falls unknown types back to HTTP. */
+export type StandaloneStreamSourceKind = GdcStreamSourceTypeKey | 'AI_PROXY_RECEIVER' | 'UNSUPPORTED'
+
+function normalizeSourceTypeToken(raw: string | null | undefined): string {
+  return String(raw ?? '')
     .trim()
     .toUpperCase()
     .replace(/\s+/g, '_')
+}
+
+/** First non-empty source-type token. Empty strings must not win over stream.stream_type. */
+export function firstNonEmptySourceType(
+  ...values: Array<string | null | undefined>
+): string | null {
+  for (const value of values) {
+    const token = String(value ?? '').trim()
+    if (token) return token
+  }
+  return null
+}
+
+/** Normalize UI / API stream or source type strings to a known presentation key. */
+export function normalizeGdcStreamSourceType(raw: string | null | undefined): GdcStreamSourceTypeKey {
+  const u = normalizeSourceTypeToken(raw)
   if (u === 'S3_OBJECT_POLLING' || u === 'S3') return 'S3_OBJECT_POLLING'
   if (u === 'DATABASE_QUERY') return 'DATABASE_QUERY'
   if (u === 'REMOTE_FILE_POLLING' || u === 'REMOTE_FILE') return 'REMOTE_FILE_POLLING'
   if (u === 'WEBHOOK_RECEIVER' || u === 'WEBHOOK' || u === 'WEBHOOK_PUSH') return 'WEBHOOK_RECEIVER'
   return 'HTTP_API_POLLING'
+}
+
+/**
+ * Classify source type for standalone Stream Test routing.
+ * Unlike {@link normalizeGdcStreamSourceType}, unknown / AI Proxy types are not treated as HTTP.
+ */
+export function classifyStandaloneStreamSourceType(raw: string | null | undefined): StandaloneStreamSourceKind {
+  const u = normalizeSourceTypeToken(raw)
+  if (!u) return 'UNSUPPORTED'
+  if (u === 'AI_PROXY_RECEIVER' || u === 'AI_PROXY') return 'AI_PROXY_RECEIVER'
+  if (u === 'S3_OBJECT_POLLING' || u === 'S3') return 'S3_OBJECT_POLLING'
+  if (u === 'DATABASE_QUERY') return 'DATABASE_QUERY'
+  if (u === 'REMOTE_FILE_POLLING' || u === 'REMOTE_FILE') return 'REMOTE_FILE_POLLING'
+  if (u === 'WEBHOOK_RECEIVER' || u === 'WEBHOOK' || u === 'WEBHOOK_PUSH') return 'WEBHOOK_RECEIVER'
+  if (u === 'HTTP_API_POLLING' || u === 'HTTP' || u === 'HTTP_API' || u === 'HTTP_POLLING') return 'HTTP_API_POLLING'
+  return 'UNSUPPORTED'
+}
+
+export function isAiProxyReceiverSourceType(raw: string | null | undefined): boolean {
+  return classifyStandaloneStreamSourceType(raw) === 'AI_PROXY_RECEIVER'
 }
 
 export type SourceTypeWorkflowLabels = {
@@ -309,10 +347,10 @@ const S3: SourceTypeUiPresentation = {
   },
   wizardApiTest: {
     leadParagraph:
-      'Verifies S3 connectivity for the configured bucket and prefix, lists a bounded set of object keys, and shows a parser sample. JSON Preview helps you see how object metadata becomes events and how ordering aligns with the checkpoint field.',
+      'Verifies S3 connectivity for the configured bucket and prefix, then fetches actual objects and parses them into sample events. Union Schema is generated only from those parsed events — never from a placeholder preview.',
     idleBlockedTail: 'complete bucket and prefix settings on the Stream Configuration step',
     idleReady:
-      'Click the primary action to run the object list and parser preview with connector credentials. Use "Use placeholder data" only when you need a local placeholder response.',
+      'Click the primary action to run connectivity check and actual object sample fetch with connector credentials. Use "Use placeholder data" only when you need a local placeholder response.',
   },
 }
 
@@ -407,6 +445,12 @@ export const SOURCE_TEST_SHELL_NEUTRAL_TITLE = 'Source Test & Preview' as const
 const NEUTRAL_STREAM_API_TEST_INTRO =
   'Load connector, source, and stream settings when a numeric stream id is available, then run a source test and preview structured output for mapping.' as const
 
+const AI_PROXY_STREAM_API_TEST_INTRO =
+  'AI Proxy receiver streams do not support standalone source test. Sample data is not available from this page.' as const
+
+const UNSUPPORTED_STREAM_API_TEST_INTRO =
+  'This source type is not supported on standalone Stream Test. Source type is not treated as HTTP, and no synthetic sample is generated.' as const
+
 /**
  * Slug stream ids (fixtures, demo) where the shell can infer `source_type` without an API fetch.
  * Numeric ids rely on `useStreamSourceTypeForApiTestShell` + mapping UI config instead.
@@ -424,6 +468,8 @@ export function resolveStreamSourceTestShellTitle(
 ): string {
   const api = sourceTypeFromApi?.trim()
   if (api) {
+    const kind = classifyStandaloneStreamSourceType(api)
+    if (kind === 'AI_PROXY_RECEIVER' || kind === 'UNSUPPORTED') return SOURCE_TEST_SHELL_NEUTRAL_TITLE
     return resolveSourceTypePresentation(api).appShellSourceTestTitle
   }
   if (streamId) {
@@ -439,6 +485,9 @@ export function resolveStreamSourceTestPageIntro(
 ): string {
   const api = sourceTypeFromApi?.trim()
   if (api) {
+    const kind = classifyStandaloneStreamSourceType(api)
+    if (kind === 'AI_PROXY_RECEIVER') return AI_PROXY_STREAM_API_TEST_INTRO
+    if (kind === 'UNSUPPORTED') return UNSUPPORTED_STREAM_API_TEST_INTRO
     return resolveSourceTypePresentation(api).streamApiTestPageIntro
   }
   if (streamId) {

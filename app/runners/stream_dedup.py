@@ -380,13 +380,27 @@ def apply_stream_dedup(
     if not apply_dedup or not config.enabled or not events:
         return events, None
 
-    seed_keys = load_dedup_seed_keys(
-        db,
-        stream_id=stream_id,
-        config=config,
-        checkpoint=checkpoint,
-        checkpoint_updated_at=checkpoint_updated_at,
-    )
+    if db is None and config.scope != "current_run":
+        from app.runners.stream_runner_db import run_with_db
+
+        seed_keys = run_with_db(
+            lambda session: load_dedup_seed_keys(
+                session,
+                stream_id=stream_id,
+                config=config,
+                checkpoint=checkpoint,
+                checkpoint_updated_at=checkpoint_updated_at,
+            ),
+            commit=False,
+        )
+    else:
+        seed_keys = load_dedup_seed_keys(
+            db,
+            stream_id=stream_id,
+            config=config,
+            checkpoint=checkpoint,
+            checkpoint_updated_at=checkpoint_updated_at,
+        )
     queue = StreamDedupQueue(config=config, seed_keys=seed_keys, log_fn=log_fn)
     filtered = queue.ingest([e for e in events if isinstance(e, dict)])
     return filtered, queue.summary

@@ -78,6 +78,7 @@ def route_protection_stage(
     shared_batch: SharedBatchContext,
     *,
     db: Session | None = None,
+    use_short_db: bool = False,
     log_fn: LogFn | None = None,
     stream_protection_rules: list[Any] | None = None,
     route_protection_rules: list[Any] | None = None,
@@ -117,13 +118,31 @@ def route_protection_stage(
         duration_ms = 0
     else:
         started = time.monotonic()
-        result = protect_batch(
-            input_events,
-            list(protection_config.rules),
-            stream_id=route_ctx.stream_id,
-            db=db,
-            ephemeral_rules=merged_ephemeral or None,
+
+        def _protect(session: Session | None) -> ProtectBatchResult:
+            return protect_batch(
+                input_events,
+                list(protection_config.rules),
+                stream_id=route_ctx.stream_id,
+                db=session,
+                ephemeral_rules=merged_ephemeral or None,
+            )
+
+        from app.protection.models import PROTECTION_MODE_TOKENIZATION
+
+        needs_tokenization = any(
+            str(getattr(rule, "protection_mode", "")) == PROTECTION_MODE_TOKENIZATION
+            for rule in list(protection_config.rules) + list(merged_ephemeral or [])
         )
+        if db is not None:
+            result = _protect(db)
+        elif use_short_db and needs_tokenization:
+            # Production StreamRunner path: short write session for vault tokenization.
+            from app.runners.stream_runner_db import run_with_db
+
+            result = run_with_db(_protect, commit=True)
+        else:
+            result = _protect(None)
         duration_ms = max(0, int((time.monotonic() - started) * 1000))
         result.duration_ms = duration_ms
         shared_batch.protection_result_cache[cache_key] = _canonical_protect_result(result)
@@ -166,6 +185,16 @@ def route_protection_stage(
     cumulative = {"total_protected_events": 0, "total_protected_fields": 0}
     if db is not None:
         cumulative = load_cumulative_protection_totals(db, route_ctx.stream_id)
+    elif use_short_db:
+        try:
+            from app.runners.stream_runner_db import run_with_db
+
+            cumulative = run_with_db(
+                lambda session: load_cumulative_protection_totals(session, route_ctx.stream_id),
+                commit=False,
+            )
+        except Exception:
+            cumulative = {"total_protected_events": 0, "total_protected_fields": 0}
 
     complete_payload = build_protection_complete_payload(
         stream_id=route_ctx.stream_id,

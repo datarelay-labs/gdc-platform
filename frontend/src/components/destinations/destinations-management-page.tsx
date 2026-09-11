@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   createDestination,
   deleteDestination,
@@ -30,7 +30,7 @@ import {
 import { useDestinationsOverviewData, type DestinationOverviewRow } from './use-destinations-overview-data'
 import type { DestinationUiHealth } from './destination-runtime-metrics'
 import type { StreamsMetricsWindow } from '../../constants/streamConsoleFilters'
-import { streamsTimeRangeLabel } from '../../constants/streamConsoleFilters'
+import { parseDestinationsHealthFilterFromSearch, streamsTimeRangeLabel } from '../../constants/streamConsoleFilters'
 import {
   loadStreamsAutoRefresh,
   loadStreamsTimeRange,
@@ -632,6 +632,8 @@ const TD = 'px-3 py-2.5'
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function DestinationsManagementPage() {
+  const location = useLocation()
+  const navigate = useNavigate()
   const [autoRefresh, setAutoRefresh] = useState<StreamsAutoRefreshOption>('Off')
   const [timeRange, setTimeRange] = useState<StreamsMetricsWindow>('1h')
   const [refreshVersion, setRefreshVersion] = useState(0)
@@ -703,7 +705,26 @@ export function DestinationsManagementPage() {
   // ─── Filters & pagination ─────────────────────────────────────────────────
 
   const [searchQ, setSearchQ] = useState('')
-  const [healthFilter, setHealthFilter] = useState<'ALL' | DestinationUiHealth>('ALL')
+  const [healthFilterLocal, setHealthFilterLocal] = useState<'ALL' | DestinationUiHealth>('ALL')
+  const healthFilterFromUrl = useMemo(
+    () => parseDestinationsHealthFilterFromSearch(location.search),
+    [location.search],
+  )
+  /** URL `?filter=warning` owns Warning selection; other values use local state. */
+  const healthFilter: 'ALL' | DestinationUiHealth = healthFilterFromUrl ?? healthFilterLocal
+
+  const setHealthFilter = useCallback(
+    (next: 'ALL' | DestinationUiHealth) => {
+      const params = new URLSearchParams(location.search)
+      if (next === 'Warning') params.set('filter', 'warning')
+      else params.delete('filter')
+      const qs = params.toString()
+      navigate(qs ? `/destinations?${qs}` : '/destinations')
+      setHealthFilterLocal(next)
+    },
+    [location.search, navigate],
+  )
+
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState<PageSize>(10)
 
@@ -974,6 +995,13 @@ export function DestinationsManagementPage() {
           <p className="mt-0.5 text-[13px] text-slate-500">
             Monitor delivery capacity and health of all destinations
           </p>
+          <p className="mt-1 text-[12px] text-slate-500">
+            For cross-stream route delivery diagnostics, open the{' '}
+            <Link to="/routes" className="font-semibold text-violet-400 hover:underline" data-testid="destinations-routes-console-link">
+              Routes console
+            </Link>
+            .
+          </p>
         </div>
 
         {/* Right-side controls */}
@@ -1070,6 +1098,8 @@ export function DestinationsManagementPage() {
           value={healthFilter}
           onChange={(e) => setHealthFilter(e.target.value as typeof healthFilter)}
           className="h-9 rounded-lg border border-[#1e2a3b] bg-[#0a1628] px-2 text-[12px] text-slate-200"
+          aria-label="Filter destinations by health status"
+          data-testid="destinations-health-filter"
         >
           <option value="ALL">All Status</option>
           <option value="Healthy">Healthy</option>

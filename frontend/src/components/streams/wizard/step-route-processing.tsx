@@ -15,7 +15,10 @@ import { WizardDataProtectionDrawer } from './wizard-data-protection-drawer'
 import { WizardMappingOutputAside } from './wizard-mapping-output-aside'
 import { computeRouteDeployReadiness } from './wizard-deploy-readiness'
 import { wizardTransformSampleReady } from './wizard-transform-sample'
+import { WizardSharedClassificationSection } from './wizard-shared-classification-section'
+import { WizardSharedPolicySection } from './wizard-shared-policy-section'
 import type {
+  WizardDataPolicyState,
   WizardDataProtectionState,
   WizardDestinationsState,
   WizardMappingRow,
@@ -33,6 +36,7 @@ export type StepRouteProcessingProps = {
   onChangeEnrichment: (rules: WizardEnrichmentRule[]) => void
   onChangeUnmappedFieldsPolicy?: (policy: WizardState['unmappedFieldsPolicy']) => void
   onChangeDataProtection: (patch: Partial<WizardDataProtectionState>) => void
+  onChangeDataPolicy?: (patch: Partial<WizardDataPolicyState>) => void
   onChangeDestinations: (patch: Partial<WizardDestinationsState>) => void
   dataProtectionDrawerOpen?: boolean
   onDataProtectionDrawerOpenChange?: (open: boolean) => void
@@ -62,6 +66,7 @@ export function StepRouteProcessing({
   onChangeEnrichment,
   onChangeUnmappedFieldsPolicy,
   onChangeDataProtection,
+  onChangeDataPolicy,
   onChangeDestinations,
   dataProtectionDrawerOpen,
   onDataProtectionDrawerOpenChange,
@@ -186,6 +191,22 @@ export function StepRouteProcessing({
         {sharedTab === 'data_protection' ? (
           <StepDataProtection state={state} onChange={onChangeDataProtection} section="full" />
         ) : null}
+
+        {sharedTab === 'classification' ? (
+          <WizardSharedClassificationSection
+            dataPolicy={state.dataPolicy}
+            dataProtection={state.dataProtection}
+            onChangeDataPolicy={onChangeDataPolicy}
+          />
+        ) : null}
+
+        {sharedTab === 'policy' ? (
+          <WizardSharedPolicySection
+            dataPolicy={state.dataPolicy}
+            dataProtection={state.dataProtection}
+            onChangeDataPolicy={onChangeDataPolicy}
+          />
+        ) : null}
       </WizardSharedProcessingSection>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.85fr)_minmax(0,1.55fr)]" data-testid="route-processing-split-layout">
@@ -193,6 +214,7 @@ export function StepRouteProcessing({
           routeDrafts={routeDrafts}
           destinations={destinations}
           dataProtection={state.dataProtection}
+          dataPolicy={state.dataPolicy}
           selectedKey={selectedRouteKey}
           onSelect={setSelectedRouteKey}
         />
@@ -204,6 +226,7 @@ export function StepRouteProcessing({
                 state={state}
                 draft={selectedDraft}
                 destination={destById.get(selectedDraft.destinationId)}
+                destinations={destinations}
                 onChangeMapping={onChangeMapping}
                 onChangeMappingMode={onChangeMappingMode}
                 onChangeFullEventJsonata={onChangeFullEventJsonata}
@@ -211,6 +234,7 @@ export function StepRouteProcessing({
                 onChangeEnrichment={onChangeEnrichment}
                 onChangeUnmappedFieldsPolicy={onChangeUnmappedFieldsPolicy}
                 onChangeDataProtection={onChangeDataProtection}
+                onChangeDataPolicy={onChangeDataPolicy}
                 onChangeDestinations={onChangeDestinations}
                 dataProtectionDrawerOpen={drawerOpen}
                 onDataProtectionDrawerOpenChange={setDrawerOpen}

@@ -42,6 +42,7 @@ const TASK_REQUIRED_RUNTIME_PATHS = [
   '/api/v1/runtime/preview/mapping',
   '/api/v1/runtime/preview/format',
   '/api/v1/runtime/preview/route-delivery',
+  '/api/v1/runtime/preview/sensitive-detection',
   '/api/v1/runtime/format-preview',
 ] as const
 

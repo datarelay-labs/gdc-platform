@@ -29,6 +29,43 @@ vi.mock('../../api/gdcStreams', () => ({
   fetchStreamById: mockFetchStreamById,
 }))
 
+vi.mock('../../api/gdcSchemaDrift', () => ({
+  fetchStreamSchemaFieldDrifts: vi.fn(async () => ({
+    stream_id: 42,
+    drift_detection_enabled: true,
+    baseline_established: true,
+    baseline_established_at: '2026-01-01T00:00:00Z',
+    baseline_path_count: 3,
+    baseline_version: 1,
+    baseline_reset_at: null,
+    status_filter: 'open',
+    findings: [
+      {
+        id: 9,
+        field_path: '$.email',
+        category: 'field_added',
+        status: 'open',
+        first_detected_at: '2026-01-01T00:00:00Z',
+        last_confirmed_at: '2026-01-01T00:05:00Z',
+      },
+    ],
+    finding_count: 1,
+  })),
+  fetchStreamSchemaFieldDriftsSummary: vi.fn(async () => ({
+    stream_id: 42,
+    open_count: 1,
+    acknowledged_count: 0,
+    resolved_count: 0,
+    by_category: { field_added: 1, field_removed: 0, field_type_changed: 0 },
+    baseline_version: 1,
+    baseline_established_at: '2026-01-01T00:00:00Z',
+    baseline_reset_at: null,
+    drift_detection_enabled: true,
+  })),
+  acknowledgeSchemaFieldDrift: vi.fn(),
+  resetStreamSchemaBaseline: vi.fn(),
+}))
+
 vi.mock('../../api/gdcBackfill', () => ({
   replayStreamBackfill: vi.fn(),
 }))
@@ -489,6 +526,16 @@ describe('StreamRuntimeDetailPage M17.2 layout', () => {
     expect(screen.getByTestId('stream-recent-issues-panel')).toBeInTheDocument()
     expect(screen.getByTestId('stream-why-panel')).toBeInTheDocument()
     expect(screen.getByTestId('stream-information-panel')).toBeInTheDocument()
+  })
+
+  it('shows schema drift field, type, and status on the OSS schema tab', async () => {
+    const user = userEvent.setup()
+    renderRuntimePage('42')
+    await user.click(await screen.findByTestId('stream-detail-tab-schema'))
+    expect(await screen.findByTestId('schema-drift-panel')).toBeInTheDocument()
+    expect(screen.getByTestId('schema-drift-row-9')).toHaveTextContent('$.email')
+    expect(screen.getByTestId('schema-drift-row-9')).toHaveTextContent('Field added')
+    expect(screen.getByTestId('schema-drift-row-9')).toHaveTextContent('open')
   })
 
   it('shows run history inside observability without placeholder tabs', async () => {

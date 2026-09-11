@@ -292,8 +292,10 @@ browser_unsupported_axes:
   notes:
     - Route Processing step always shown in UI but runtime gated; Browser still runs when route_runtime matches lab flag.
     - Source/Auth/Dest/Transform/Governance stream defaults are UI-supported (R019a–e).
-    - Per-route transform/policy override: wizard deploy is intent_only → API_SEEDED only (R019d/R019f).
+    - Per-route transform override: Wizard persistKind=route_transform → Browser allowed (R019d).
+    - Per-route policy override: Wizard persistKind=governance (Policy continue/require_review/quarantine/block) → Browser allowed (R019f).
     - Protection override + mixed delivery outcome: governance persist / Routes Protection → Browser allowed (R019e).
+    - Incomplete classification (no floor/rule) and incomplete protection (no persistable action) remain intent_only Deploy blockers — not MIXED_* topologies.
     - Failover: no dedicated UI → API_SEEDED only (R019f).
 
 browser_route_override_topologies:
@@ -302,9 +304,9 @@ browser_route_override_topologies:
     - MULTI_ROUTE_ALL_INHERIT
     - MULTI_ROUTE_MIXED_DESTINATION_TYPE
     - MULTI_ROUTE_SAME_DESTINATION_TYPE_DIFFERENT_INSTANCE
+    - MULTI_ROUTE_MIXED_TRANSFORM_OVERRIDE
     - MULTI_ROUTE_MIXED_PROTECTION_OVERRIDE
+    - MULTI_ROUTE_MIXED_POLICY_OVERRIDE
     - MULTI_ROUTE_MIXED_DELIVERY_OUTCOME
   api_only:
-    - MULTI_ROUTE_MIXED_TRANSFORM_OVERRIDE
-    - MULTI_ROUTE_MIXED_POLICY_OVERRIDE
     - FAILOVER_ROUTE

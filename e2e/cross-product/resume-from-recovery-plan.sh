@@ -15,6 +15,8 @@ ATTEMPT="recovery-attempt-001"
 REPORTS_ROOT_CLI=""
 DRY_RUN=0
 ONLY_SHARD=""
+WORKERS="${GDC_XP_WORKERS:-1}"
+FAULT_WORKERS="${GDC_XP_FAULT_WORKERS:-1}"
 # Optional catalog fallback (main checkout) when worktree generated/ lacks gitignored files.
 CATALOG_FALLBACK_E2E="${GDC_XP_CATALOG_FALLBACK_E2E:-}"
 
@@ -24,6 +26,8 @@ while [[ $# -gt 0 ]]; do
     --attempt) ATTEMPT="$2"; shift 2 ;;
     --reports-root) REPORTS_ROOT_CLI="$2"; shift 2 ;;
     --only-shard|--canary-shard) ONLY_SHARD="$2"; shift 2 ;;
+    --workers) WORKERS="$2"; shift 2 ;;
+    --fault-workers) FAULT_WORKERS="$2"; shift 2 ;;
     --catalog-fallback-e2e) CATALOG_FALLBACK_E2E="$2"; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     -h|--help)
@@ -33,6 +37,8 @@ Usage: resume-from-recovery-plan.sh [options]
   --attempt recovery-attempt-NNN
   --reports-root PATH
   --only-shard|--canary-shard SHARD_ID
+  --workers N                 Parallel normal shards (default 1 = sequential)
+  --fault-workers N           GLOBAL_FAULT concurrency (default 1)
   --catalog-fallback-e2e PATH   # e2e root containing generated/shard-plan.json
   --dry-run
 EOF
@@ -534,6 +540,22 @@ PY
   exit 43
 fi
 export GDC_XP_VALID_COMBINATIONS_PATH="$VALID_COMBOS"
+
+if [[ "${WORKERS}" -gt 1 ]]; then
+  echo "PARALLEL resume workers=$WORKERS fault_workers=$FAULT_WORKERS shards=${#RERUN[@]}"
+  PAR_ARGS=(
+    --run-id "$RUN_ID"
+    --attempt "$ATTEMPT"
+    --workers "$WORKERS"
+    --fault-workers "$FAULT_WORKERS"
+    --reports-root "$REPORTS_ROOT"
+    --route-runtime "${GDC_XP_ROUTE_RUNTIME:-ROUTE_ON}"
+  )
+  for shard in "${RERUN[@]}"; do
+    PAR_ARGS+=(--only-shard "$shard")
+  done
+  exec python3 "$E2E/cross-product/parallel-matrix-coordinator.py" "${PAR_ARGS[@]}"
+fi
 
 REPL_ROOT="$ATTEMPT_DIR/replacements"
 mkdir -p "$REPL_ROOT"

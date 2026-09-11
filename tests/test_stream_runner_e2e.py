@@ -215,6 +215,29 @@ def _seed_stream_runtime(
     }
 
 
+def _add_enabled_route_for_destination(
+    db: Session,
+    stream_id: int,
+    destination_id: int,
+    *,
+    enabled: bool = True,
+) -> Route:
+    """Attach an existing destination to the stream as a first-class Route."""
+
+    route = Route(
+        stream_id=int(stream_id),
+        destination_id=int(destination_id),
+        enabled=enabled,
+        failure_policy="LOG_AND_CONTINUE",
+        formatter_config_json={},
+        rate_limit_json={},
+        status="ENABLED" if enabled else "DISABLED",
+    )
+    db.add(route)
+    db.flush()
+    return route
+
+
 def _checkpoint_value(db: Session, stream_id: int) -> dict[str, Any]:
     row = db.query(Checkpoint).filter(Checkpoint.stream_id == stream_id).first()
     assert row is not None
@@ -501,7 +524,8 @@ def test_runner_owns_single_commit_on_success_with_checkpoint_and_logs(db: Sessi
 
     runner.run(context, db=db)
 
-    assert len(commit_calls) == 1
+    # Runner must not commit the caller Session (short-session writes only).
+    assert len(commit_calls) == 0
     checkpoint = _checkpoint_value(db, seeded["stream_id"])
     assert checkpoint["last_success_event"]["event_id"] == "evt-commit-1"
 
@@ -528,7 +552,7 @@ def test_runner_owns_single_commit_on_partial_failure_logs_without_checkpoint_up
     runner.run(context, db=db)
     after_checkpoint = _checkpoint_value(db, seeded["stream_id"])
 
-    assert len(commit_calls) == 1
+    assert len(commit_calls) == 0
     assert before_checkpoint == after_checkpoint
 
     rows = (
@@ -587,7 +611,7 @@ def test_retry_and_backoff_success_updates_checkpoint_with_single_commit(db: Ses
     runner.run(context, db=db)
     after_checkpoint = _checkpoint_value(db, seeded["stream_id"])
 
-    assert len(commit_calls) == 1
+    assert len(commit_calls) == 0
     assert len(sender.calls) == 2
     assert before_checkpoint != after_checkpoint
     assert after_checkpoint["last_success_event"]["event_id"] == "evt-retry-1"
@@ -617,7 +641,7 @@ def test_retry_and_backoff_exhausted_does_not_update_checkpoint_with_single_comm
     runner.run(context, db=db)
     after_checkpoint = _checkpoint_value(db, seeded["stream_id"])
 
-    assert len(commit_calls) == 1
+    assert len(commit_calls) == 0
     assert len(sender.calls) == 3
     assert before_checkpoint == after_checkpoint
     rows = _delivery_logs(db, seeded["stream_id"])
@@ -643,8 +667,9 @@ def test_disable_route_on_failure_stages_route_disable_with_single_runner_commit
     runner.run(context, db=db)
     after_checkpoint = _checkpoint_value(db, seeded["stream_id"])
 
-    assert len(commit_calls) == 1
-    assert len(rollback_calls) == 0
+    assert len(commit_calls) == 0
+    # One rollback releases the caller read txn before destination I/O.
+    assert len(rollback_calls) == 1
     assert before_checkpoint == after_checkpoint
     assert context.routes[0]["enabled"] is False
 
@@ -672,7 +697,8 @@ def test_source_rate_limited_is_persisted_with_single_commit(db: Session) -> Non
 
     runner.run(context, db=db)
 
-    assert len(commit_calls) == 1
+    # No destination I/O → no caller txn release; runtime writes use short sessions.
+    assert len(commit_calls) == 0
     assert len(rollback_calls) == 0
     assert context.stream["status"] == "RATE_LIMITED_SOURCE"
     row = db.query(DeliveryLog).filter(
@@ -702,8 +728,8 @@ def test_destination_rate_limited_is_persisted_and_checkpoint_unchanged_with_sin
     runner.run(context, db=db)
     after_checkpoint = _checkpoint_value(db, seeded["stream_id"])
 
-    assert len(commit_calls) == 1
-    assert len(rollback_calls) == 0
+    assert len(commit_calls) == 0
+    assert len(rollback_calls) == 1
     assert before_checkpoint == after_checkpoint
     rows = _delivery_logs(db, seeded["stream_id"])
     assert any(row.stage == "destination_rate_limited" for row in rows)
@@ -733,7 +759,7 @@ def test_route_rate_limit_json_second_run_skips_sender(db: Session) -> None:
 
     runner.run(context, db=db)
     assert len(sender.calls) == 1
-    assert len(commit_calls) == 2
+    assert len(commit_calls) == 0
 
     rows = _delivery_logs(db, seeded["stream_id"])
     assert any(r.stage == "route_send_success" for r in rows)
@@ -805,8 +831,8 @@ def test_route_skip_is_persisted_with_single_runner_commit(db: Session) -> None:
 
     runner.run(context, db=db)
 
-    assert len(commit_calls) == 1
-    assert len(rollback_calls) == 0
+    assert len(commit_calls) == 0
+    assert len(rollback_calls) == 1
     rows = _delivery_logs(db, seeded["stream_id"])
     assert any(row.stage == "route_skip" for row in rows)
     assert any(row.stage == "route_send_success" for row in rows)
@@ -831,8 +857,8 @@ def test_route_unknown_failure_policy_is_persisted_with_single_commit(
     runner.run(context, db=db)
     after_checkpoint = _checkpoint_value(db, seeded["stream_id"])
 
-    assert len(commit_calls) == 1
-    assert len(rollback_calls) == 0
+    assert len(commit_calls) == 0
+    assert len(rollback_calls) == 1
     assert before_checkpoint == after_checkpoint
     rows = _delivery_logs(db, seeded["stream_id"])
     assert any(row.stage == "route_send_failed" for row in rows)

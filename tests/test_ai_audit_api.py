@@ -12,8 +12,10 @@ from sqlalchemy.orm import Session
 from app.ai_audit.models import AI_AUDIT_EVENT_PROMPT_BLOCKED, AiAuditEvent
 from app.auth.jwt_service import issue_access_token
 from app.database import get_db, get_db_read_bounded
-from app.main import app
+from tests.ai_gateway_http import build_ai_gateway_test_app
 from tests.ai_policy_test_helpers import seed_ai_stream_for_policy
+
+app = build_ai_gateway_test_app()
 
 
 @pytest.fixture

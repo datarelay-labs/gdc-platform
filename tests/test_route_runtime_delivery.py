@@ -254,6 +254,8 @@ def test_checkpoint_reference_on_success() -> None:
 
     pipeline = process_routes([route_ctx], shared, send_fn=ok_send)
     assert pipeline.checkpoint_reference_events
+    assert pipeline.checkpoint_reference_events[0]["message"] == "hello"
+    assert pipeline.stage_results[0].checkpoint_source_events[0]["message"] == "hello"
     dr = pipeline.stage_results[0].delivery_result
     assert dr is not None
     assert dr.delivery_success is True

@@ -27,7 +27,8 @@ function streamSnapshotEqual(a: OperationalStreamSnapshot, b: OperationalStreamS
     a.last_error_at === b.last_error_at &&
     a.last_error_message === b.last_error_message &&
     a.checkpoint_updated_at === b.checkpoint_updated_at &&
-    a.checkpoint_lag_seconds === b.checkpoint_lag_seconds
+    a.checkpoint_lag_seconds === b.checkpoint_lag_seconds &&
+    (a.open_schema_field_drift_count ?? 0) === (b.open_schema_field_drift_count ?? 0)
   )
 }
 

@@ -31,6 +31,20 @@ describe('StepConfig', () => {
     vi.restoreAllMocks()
   })
 
+  it('renders SQL query instead of HTTP endpoint for DATABASE_QUERY', () => {
+    const state = buildInitialState()
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.sqlQuery = 'SELECT id, email, created_at FROM users'
+    render(<StepConfig state={state} onChange={vi.fn()} />)
+    expect(screen.getByLabelText('SQL Query')).toBeInTheDocument()
+    expect((screen.getByLabelText('SQL Query') as HTMLTextAreaElement).value).toBe(
+      'SELECT id, email, created_at FROM users',
+    )
+    expect(screen.queryByText('HTTP method')).not.toBeInTheDocument()
+    expect(screen.queryByText('Endpoint path *')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('JSON Request Body')).not.toBeInTheDocument()
+  })
+
   it('does not ask event array/checkpoint before API test', () => {
     const state = buildInitialState()
     render(<StepConfig state={state} onChange={vi.fn()} />)

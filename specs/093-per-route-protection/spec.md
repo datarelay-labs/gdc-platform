@@ -1,11 +1,11 @@
 # M13.3 Per Route Protection
 
-**Milestone:** M13.3 (Per Route Protection)  
-**Status:** Spec only — no implementation authorized by this document  
-**Depends on:** M13.1 Route Processing Foundation (`specs/091-route-processing-architecture/spec.md`), M13.2 Per Route Transform (`specs/092-per-route-transform/spec.md`)  
-**Design review:** [`docs/architecture/m13-3-protection-design-review.md`](../../docs/architecture/m13-3-protection-design-review.md) (M13.3 findings incorporated); [`docs/architecture/m13-route-architecture-design-review.md`](../../docs/architecture/m13-route-architecture-design-review.md)  
-**Authority:** Product Charter 1.2.1, Master WBS 1.2.1, `.specify/memory/constitution.md`, Governance & Transform Policy v1.1, Governance UX Charter v1.1, Governance Workspace v1.1  
-**Architecture:** [`docs/architecture/route-processing-foundation-implementation-spec.md`](../../docs/architecture/route-processing-foundation-implementation-spec.md)  
+**Milestone:** M13.3 (Per Route Protection)
+**Status:** CURRENT implementation spec for M13.3 (delivered). Original M13 rollout assumed flag default OFF; product default is ON as of P1-4 (`false` = rollback).
+**Depends on:** M13.1 Route Processing Foundation (`specs/091-route-processing-architecture/spec.md`), M13.2 Per Route Transform (`specs/092-per-route-transform/spec.md`)
+**Design review:** [`docs/architecture/m13-3-protection-design-review.md`](../../docs/architecture/m13-3-protection-design-review.md) (M13.3 findings incorporated); [`docs/architecture/m13-route-architecture-design-review.md`](../../docs/architecture/m13-route-architecture-design-review.md)
+**Authority:** Product Charter 1.2.1, Master WBS 1.2.1, `.specify/memory/constitution.md`, Governance & Transform Policy v1.1, Governance UX Charter v1.1, Governance Workspace v1.1
+**Architecture:** [`docs/architecture/route-processing-foundation-implementation-spec.md`](../../docs/architecture/route-processing-foundation-implementation-spec.md)
 **Gap analysis:** [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)
 
 ---
@@ -815,7 +815,7 @@ Stored in `streams.config_json` schema drift policy (existing):
 
 ### 10.3 Route override (intent — config in M13.3, drift policy enforcement split)
 
-Governance Policy §21 defines route-aware schema drift overrides (e.g. Route B Require Review for unknown normal). 
+Governance Policy §21 defines route-aware schema drift overrides (e.g. Route B Require Review for unknown normal).
 
 | Override target | M13.3 responsibility | M13.5 responsibility |
 |-----------------|----------------------|----------------------|

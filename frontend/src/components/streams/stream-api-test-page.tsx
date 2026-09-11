@@ -17,16 +17,31 @@ import { streamMappingPath } from '../../config/nav-paths'
 import { countLeafKeys, formatBytes, resolveJsonPath } from './stream-api-test-json-utils'
 import { StreamWorkflowSummaryStrip } from './stream-workflow-checklist'
 import { computeStreamWorkflow } from '../../utils/streamWorkflow'
-import { resolveStreamSourceTestPageIntro, resolveStreamSourceTestShellTitle } from '../../utils/sourceTypePresentation'
+import {
+  STREAM_ID_SHELL_SOURCE_TYPE_HINT,
+  firstNonEmptySourceType,
+  resolveStreamSourceTestPageIntro,
+  resolveStreamSourceTestShellTitle,
+  type StandaloneStreamSourceKind,
+} from '../../utils/sourceTypePresentation'
 import { fetchStreamById } from '../../api/gdcStreams'
 import { fetchStreamMappingUiConfig } from '../../api/gdcRuntime'
 import { fetchConnectorById } from '../../api/gdcConnectors'
+import type { MappingUIConfigResponse, StreamRead } from '../../api/types/gdcApi'
 import {
   runExtractionValidate,
-  runHttpApiTest,
   type ExtractionValidateResponse,
   type HttpApiTestResponse,
 } from '../../api/gdcRuntimePreview'
+import {
+  buildWebhookStandaloneSampleResult,
+  resolveStandaloneStreamSourceKind,
+  runStandaloneStreamSourceTest,
+  standaloneConnectionStatusLabel,
+  standaloneSampleStatusLabel,
+  type StandaloneConnectionStatus,
+  type StandaloneSampleStatus,
+} from '../../utils/standaloneStreamSourceTest'
 
 const WIZARD_STEPS = [
   { key: 'connector', title: 'Select Connector', subtitle: 'Choose a connector' },
@@ -312,10 +327,16 @@ export function StreamApiTestPage() {
   const navigate = useNavigate()
   const numericId = /^\d+$/.test(streamId) ? Number(streamId) : null
 
-  const [configLoading, setConfigLoading] = useState(false)
+  const [configLoading, setConfigLoading] = useState(() => numericId != null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [streamTitle, setStreamTitle] = useState('')
   const [workflowSourceType, setWorkflowSourceType] = useState<string | null>(null)
+  const [sourceKind, setSourceKind] = useState<StandaloneStreamSourceKind>(() => {
+    if (numericId != null) return 'UNSUPPORTED'
+    return STREAM_ID_SHELL_SOURCE_TYPE_HINT[streamId] ?? 'UNSUPPORTED'
+  })
+  const [savedStream, setSavedStream] = useState<StreamRead | null>(null)
+  const [savedCfg, setSavedCfg] = useState<MappingUIConfigResponse | null>(null)
   const [connectorLabel, setConnectorLabel] = useState<string | null>(null)
   const [connectorId, setConnectorId] = useState<number | null>(null)
   const [method, setMethod] = useState('GET')
@@ -327,10 +348,24 @@ export function StreamApiTestPage() {
   const [mappingEventArrayPath, setMappingEventArrayPath] = useState('')
   const [mappingEventRootPath, setMappingEventRootPath] = useState('')
   const [timeoutSec, setTimeoutSec] = useState('30')
+  const [savedQuery, setSavedQuery] = useState('')
+  const [savedQueryTimeout, setSavedQueryTimeout] = useState<string>('')
+  const [savedRemoteDirectory, setSavedRemoteDirectory] = useState('')
+  const [savedFilePattern, setSavedFilePattern] = useState('*')
+  const [savedRecursive, setSavedRecursive] = useState(false)
+  const [savedMaxObjects, setSavedMaxObjects] = useState('')
+  const [savedBucket, setSavedBucket] = useState('')
+  const [savedPrefix, setSavedPrefix] = useState('')
 
   const [httpResult, setHttpResult] = useState<HttpApiTestResponse | null>(null)
+  const [samplePayload, setSamplePayload] = useState<unknown>(null)
+  const [connectionStatus, setConnectionStatus] = useState<StandaloneConnectionStatus>('idle')
+  const [sampleStatus, setSampleStatus] = useState<StandaloneSampleStatus>('idle')
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [statusHint, setStatusHint] = useState<string | null>(null)
   const [sendError, setSendError] = useState<string | null>(null)
   const [requestBusy, setRequestBusy] = useState(false)
+  const [eventCount, setEventCount] = useState(0)
 
   const [responseTab, setResponseTab] = useState<ResponseTab>('json')
   const [treeSearch, setTreeSearch] = useState('')
@@ -349,8 +384,11 @@ export function StreamApiTestPage() {
 
   useEffect(() => {
     if (numericId == null) {
-      setLoadError('Streams 목록에서 스트림을 선택하면 숫자 stream id로 이 페이지가 열립니다.')
-      setWorkflowSourceType(null)
+      setLoadError('Open this page from Streams using a numeric stream id.')
+      setWorkflowSourceType(STREAM_ID_SHELL_SOURCE_TYPE_HINT[streamId] ?? null)
+      setSourceKind(STREAM_ID_SHELL_SOURCE_TYPE_HINT[streamId] ?? 'UNSUPPORTED')
+      setSavedStream(null)
+      setSavedCfg(null)
       return
     }
     let cancelled = false
@@ -364,14 +402,32 @@ export function StreamApiTestPage() {
         ])
         if (cancelled) return
         if (!stream || !cfg) {
-          setLoadError('스트림 또는 매핑 설정을 불러오지 못했습니다.')
+          setLoadError('Could not load stream or mapping settings.')
           setWorkflowSourceType(null)
+          setSourceKind('UNSUPPORTED')
           return
         }
+        setSavedStream(stream)
+        setSavedCfg(cfg)
         setStreamTitle(cfg.stream_name || stream.name || `Stream ${numericId}`)
-        setWorkflowSourceType(cfg.source_type ?? stream.stream_type ?? null)
+        const rawSourceType = firstNonEmptySourceType(cfg.source_type, stream.source_type, stream.stream_type)
+        setWorkflowSourceType(rawSourceType)
+        const kind = resolveStandaloneStreamSourceKind(stream, cfg)
+        setSourceKind(kind)
         const sc = cfg.source_config ?? {}
         const cfgj = (stream.config_json ?? {}) as Record<string, unknown>
+        setSavedBucket(String(sc.bucket ?? cfgj.bucket ?? '').trim())
+        setSavedPrefix(String(sc.prefix ?? cfgj.prefix ?? '').trim())
+        setSavedMaxObjects(
+          cfgj.max_objects_per_run != null ? String(cfgj.max_objects_per_run) : '',
+        )
+        setSavedQuery(String(cfgj.query ?? sc.query ?? '').trim())
+        const qt = cfgj.query_timeout_seconds ?? sc.query_timeout_seconds ?? cfgj.timeout_seconds
+        setSavedQueryTimeout(qt != null ? String(qt) : '')
+        setSavedRemoteDirectory(String(cfgj.remote_directory ?? sc.remote_directory ?? '').trim())
+        setSavedFilePattern(String(cfgj.file_pattern ?? sc.file_pattern ?? '*').trim() || '*')
+        setSavedRecursive(Boolean(cfgj.recursive ?? sc.recursive ?? false))
+
         const baseFromSource = String(sc.base_url ?? '').trim()
         const baseFromStream = String(cfgj.base_url ?? '').trim()
         setBaseUrl(baseFromStream || baseFromSource)
@@ -423,8 +479,35 @@ export function StreamApiTestPage() {
         }
         setHttpResult(null)
         setSendError(null)
+        if (kind === 'WEBHOOK_RECEIVER') {
+          const webhook = buildWebhookStandaloneSampleResult(cfg.source_config)
+          setConnectionStatus(webhook.connectionStatus)
+          setSampleStatus(webhook.sampleStatus)
+          setSamplePayload(webhook.parsedJson)
+          setEventCount(webhook.eventCount)
+          setStatusMessage(webhook.message)
+          setStatusHint(webhook.hint)
+        } else if (kind === 'AI_PROXY_RECEIVER' || kind === 'UNSUPPORTED') {
+          setConnectionStatus(kind === 'AI_PROXY_RECEIVER' ? 'n_a' : 'unsupported')
+          setSampleStatus(kind === 'AI_PROXY_RECEIVER' ? 'not_available' : 'unsupported')
+          setSamplePayload(null)
+          setEventCount(0)
+          setStatusMessage('Sample Not Available')
+          setStatusHint(
+            kind === 'AI_PROXY_RECEIVER'
+              ? 'AI Proxy receiver streams do not support standalone source test.'
+              : 'This source type is not supported on standalone Stream Test. Source type is not treated as HTTP.',
+          )
+        } else {
+          setConnectionStatus('idle')
+          setSampleStatus('idle')
+          setSamplePayload(null)
+          setEventCount(0)
+          setStatusMessage(null)
+          setStatusHint(null)
+        }
       } catch (e) {
-        if (!cancelled) setLoadError(e instanceof Error ? e.message : '로드 실패')
+        if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Failed to load stream')
       } finally {
         if (!cancelled) setConfigLoading(false)
       }
@@ -432,15 +515,20 @@ export function StreamApiTestPage() {
     return () => {
       cancelled = true
     }
-  }, [numericId])
+  }, [numericId, streamId])
 
+  const sampleAvailable = sampleStatus === 'available'
   const previewRoot = useMemo(() => {
-    const raw = httpResult?.response?.parsed_json
+    if (!sampleAvailable) return null
+    const raw = httpResult?.response?.parsed_json ?? samplePayload
     if (raw !== undefined && raw !== null) return raw
-    return {}
-  }, [httpResult])
+    return null
+  }, [httpResult, sampleAvailable, samplePayload])
 
-  const jsonText = useMemo(() => JSON.stringify(previewRoot, null, 2), [previewRoot])
+  const jsonText = useMemo(
+    () => (previewRoot === null ? '' : JSON.stringify(previewRoot, null, 2)),
+    [previewRoot],
+  )
   const rawText = useMemo(() => {
     const raw = httpResult?.response?.raw_body
     return raw != null && String(raw).trim() !== '' ? String(raw) : jsonText
@@ -448,7 +536,7 @@ export function StreamApiTestPage() {
 
   const headersText = useMemo(() => {
     const h = httpResult?.response?.headers
-    if (!h || typeof h !== 'object') return '// (응답 헤더 없음)'
+    if (!h || typeof h !== 'object') return '// (no response headers)'
     const lines = Object.entries(h).map(([k, v]) => `${k}: ${v}`)
     const statusLine = httpResult?.response
       ? `HTTP ${httpResult.response.status_code} (${httpResult.response.latency_ms} ms)`
@@ -456,15 +544,20 @@ export function StreamApiTestPage() {
     return [statusLine, ...lines].filter(Boolean).join('\n')
   }, [httpResult])
 
-  const resolvedEvents = resolveJsonPath(previewRoot, eventPath)
+  const resolvedEvents = previewRoot == null ? undefined : resolveJsonPath(previewRoot, eventPath)
   const arrayEvents = Array.isArray(resolvedEvents) ? resolvedEvents : []
   const firstEvent = arrayEvents[0]
-  const eventJsonText = useMemo(
-    () => (firstEvent !== undefined ? JSON.stringify(firstEvent, null, 2) : '// 경로에 이벤트가 없습니다'),
-    [firstEvent],
-  )
+  const eventJsonText = useMemo(() => {
+    if (!sampleAvailable) return '// No sample available'
+    if (firstEvent !== undefined) return JSON.stringify(firstEvent, null, 2)
+    if (previewRoot != null) return JSON.stringify(previewRoot, null, 2)
+    return '// No events at this path'
+  }, [firstEvent, previewRoot, sampleAvailable])
 
   const footerPathInfo = useMemo(() => {
+    if (previewRoot == null) {
+      return { pathLabel: selectedTreePath, typeLabel: '—', length: null as number | null }
+    }
     const at = resolveJsonPath(previewRoot, selectedTreePath)
     if (Array.isArray(at)) {
       return { pathLabel: selectedTreePath, typeLabel: 'array', length: at.length }
@@ -499,6 +592,11 @@ export function StreamApiTestPage() {
   }, [])
 
   const handleValidate = useCallback(() => {
+    if (previewRoot == null) {
+      setPathValidated(false)
+      setExtractionValidationMessage('Load an actual sample before validating extraction paths.')
+      return
+    }
     if (extractionMode === 'basic') {
       const v = resolveJsonPath(previewRoot, eventPath)
       setPathValidated(Array.isArray(v) && v.length > 0)
@@ -506,16 +604,16 @@ export function StreamApiTestPage() {
       return
     }
 
-    if (!httpResult?.response?.parsed_json) {
+    if (!httpResult?.response?.parsed_json && samplePayload == null) {
       setPathValidated(false)
-      setExtractionValidationMessage('Send Request first to load a sample payload.')
+      setExtractionValidationMessage('Load an actual sample before validating extraction paths.')
       return
     }
 
     setValidatingExtraction(true)
     setExtractionValidationMessage(null)
     void runExtractionValidate({
-      payload: httpResult.response.parsed_json,
+      payload: httpResult?.response?.parsed_json ?? samplePayload,
       event_array_path: eventPath || null,
       event_root_path: eventRootPathInput || null,
       checkpoint_path: checkpointPathInput || null,
@@ -543,27 +641,29 @@ export function StreamApiTestPage() {
         setExtractionValidationMessage(`Validation request failed: ${err instanceof Error ? err.message : String(err)}`)
       })
       .finally(() => setValidatingExtraction(false))
-  }, [checkpointPathInput, eventPath, eventRootPathInput, extractionMode, httpResult?.response?.parsed_json, previewRoot])
+  }, [checkpointPathInput, eventPath, eventRootPathInput, extractionMode, httpResult?.response?.parsed_json, previewRoot, samplePayload])
 
   const sendRequest = useCallback(async () => {
-    if (numericId == null || requestBusy) return
-    if (!endpointPath.trim()) {
-      setSendError('endpoint 경로가 필요합니다.')
+    if (numericId == null || requestBusy || !savedStream || !savedCfg) return
+    if (sourceKind === 'WEBHOOK_RECEIVER' || sourceKind === 'AI_PROXY_RECEIVER' || sourceKind === 'UNSUPPORTED') {
       return
     }
-    if (connectorId == null && !baseUrl.trim()) {
-      setSendError('connector가 없을 때는 Base URL이 필요합니다.')
-      return
+    let jsonBody: unknown | undefined
+    if (sourceKind === 'HTTP_API_POLLING') {
+      const trimmed = bodyText.trim()
+      if (trimmed) {
+        try {
+          jsonBody = JSON.parse(trimmed) as unknown
+        } catch (e) {
+          setSendError(e instanceof Error ? e.message : 'Invalid JSON body')
+          return
+        }
+      }
     }
     setRequestBusy(true)
     setSendError(null)
     setHttpResult(null)
     try {
-      let jsonBody: unknown | undefined
-      const trimmed = bodyText.trim()
-      if (trimmed) {
-        jsonBody = JSON.parse(trimmed) as unknown
-      }
       const params: Record<string, string> = {}
       for (const r of queryRows) {
         const k = r.key.trim()
@@ -575,34 +675,47 @@ export function StreamApiTestPage() {
         const k = h.k.trim()
         if (k) headersObj[k] = h.v
       }
-      const streamCfg: Record<string, unknown> = {
-        method,
-        endpoint: endpointPath.trim(),
-        timeout_seconds: Number.parseInt(timeoutSec, 10) || 30,
-        params,
-      }
-      if (Object.keys(headersObj).length) streamCfg.headers = headersObj
-      if (jsonBody !== undefined) streamCfg.body = jsonBody
-
-      const res = await runHttpApiTest({
-        connector_id: connectorId ?? undefined,
-        source_config: connectorId != null ? {} : { base_url: baseUrl.trim() },
-        stream_config: streamCfg,
-        checkpoint: null,
-        fetch_sample: true,
+      const result = await runStandaloneStreamSourceTest({
+        sourceKind,
+        stream: savedStream,
+        cfg: savedCfg,
+        connectorId,
+        httpOverrides:
+          sourceKind === 'HTTP_API_POLLING'
+            ? {
+                method,
+                endpoint: endpointPath.trim(),
+                baseUrl: baseUrl.trim(),
+                headers: headersObj,
+                params,
+                body: jsonBody,
+                timeoutSeconds: Number.parseInt(timeoutSec, 10) || 30,
+              }
+            : null,
       })
-      setHttpResult(res)
-      if (!res.ok) {
-        setSendError(res.message ?? res.error_type ?? '요청 실패')
+      setHttpResult(result.httpResult)
+      setSamplePayload(result.parsedJson)
+      setConnectionStatus(result.connectionStatus)
+      setSampleStatus(result.sampleStatus)
+      setEventCount(result.eventCount)
+      setStatusMessage(result.message)
+      setStatusHint(result.hint)
+      if (result.sampleStatus === 'failed' || result.connectionStatus === 'fail') {
+        setSendError(result.message)
       }
     } catch (e) {
-      setSendError(e instanceof Error ? e.message : '요청 실패')
+      setSendError(e instanceof Error ? e.message : 'Request failed')
+      setConnectionStatus('fail')
+      setSampleStatus('failed')
     } finally {
       setRequestBusy(false)
     }
   }, [
     numericId,
     requestBusy,
+    savedStream,
+    savedCfg,
+    sourceKind,
     endpointPath,
     connectorId,
     baseUrl,
@@ -641,10 +754,10 @@ export function StreamApiTestPage() {
         routesTotal: 0,
         routesOk: 0,
         hasConnector: connectorId != null || baseUrl.trim().length > 0,
-        hasApiTest: Boolean(httpResult?.ok && httpResult.response?.parsed_json != null),
+        hasApiTest: sampleStatus === 'available',
         sourceType: workflowSourceType,
       }),
-    [streamId, connectorId, baseUrl, httpResult, workflowSourceType],
+    [streamId, connectorId, baseUrl, sampleStatus, workflowSourceType],
   )
 
   const fullUrlPreview = `${baseUrl}${endpointPath}`
@@ -658,7 +771,7 @@ export function StreamApiTestPage() {
           {configLoading ? (
             <p className="inline-flex items-center gap-2 text-[12px] text-slate-600">
               <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-              스트림 설정 로드 중…
+              Loading stream settings…
             </p>
           ) : null}
           {loadError ? <p className="text-[12px] font-medium text-amber-800 dark:text-amber-200">{loadError}</p> : null}
@@ -669,7 +782,7 @@ export function StreamApiTestPage() {
               {connectorLabel ? (
                 <>
                   {' '}
-                  · 커넥터 <span className="font-semibold">{connectorLabel}</span>
+                  · Connector <span className="font-semibold">{connectorLabel}</span>
                 </>
               ) : null}
             </p>
@@ -692,8 +805,72 @@ export function StreamApiTestPage() {
           <section className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-gdc-border dark:bg-gdc-card">
             <div className="flex flex-wrap items-center gap-2">
               <span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-600 text-[11px] font-bold text-white">1</span>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Request Configuration</h3>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                {sourceKind === 'HTTP_API_POLLING' ? 'Request Configuration' : 'Saved source configuration'}
+              </h3>
+              <span className="rounded-md border border-slate-200/90 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600 dark:border-gdc-border dark:bg-gdc-elevated dark:text-slate-300">
+                {sourceKind}
+              </span>
             </div>
+            {configLoading ? (
+              <p className="mt-4 text-[12px] text-slate-600 dark:text-gdc-muted">Loading saved source configuration…</p>
+            ) : sourceKind !== 'HTTP_API_POLLING' ? (
+              <div className="mt-4 space-y-3" data-testid="standalone-non-http-config">
+                {sourceKind === 'S3_OBJECT_POLLING' ? (
+                  <dl className="grid gap-2 text-[12px] sm:grid-cols-2">
+                    <div><dt className="text-slate-500">Bucket</dt><dd className="font-mono font-semibold text-slate-800 dark:text-slate-100">{savedBucket || '—'}</dd></div>
+                    <div><dt className="text-slate-500">Prefix</dt><dd className="font-mono font-semibold text-slate-800 dark:text-slate-100">{savedPrefix || '—'}</dd></div>
+                    <div><dt className="text-slate-500">max_objects_per_run</dt><dd className="font-mono font-semibold text-slate-800 dark:text-slate-100">{savedMaxObjects || '—'}</dd></div>
+                  </dl>
+                ) : null}
+                {sourceKind === 'DATABASE_QUERY' ? (
+                  <dl className="grid gap-2 text-[12px]">
+                    <div>
+                      <dt className="text-slate-500">Saved query</dt>
+                      <dd className="mt-1 whitespace-pre-wrap rounded-md border border-slate-200/90 bg-slate-50 p-2 font-mono text-[11px] text-slate-800 dark:border-gdc-border dark:bg-gdc-elevated dark:text-slate-100">
+                        {savedQuery || '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">query_timeout_seconds</dt>
+                      <dd className="font-mono font-semibold text-slate-800 dark:text-slate-100">{savedQueryTimeout || '—'}</dd>
+                    </div>
+                  </dl>
+                ) : null}
+                {sourceKind === 'REMOTE_FILE_POLLING' ? (
+                  <dl className="grid gap-2 text-[12px] sm:grid-cols-2">
+                    <div><dt className="text-slate-500">remote_directory</dt><dd className="font-mono font-semibold text-slate-800 dark:text-slate-100">{savedRemoteDirectory || '—'}</dd></div>
+                    <div><dt className="text-slate-500">file_pattern</dt><dd className="font-mono font-semibold text-slate-800 dark:text-slate-100">{savedFilePattern}</dd></div>
+                    <div><dt className="text-slate-500">recursive</dt><dd className="font-semibold text-slate-800 dark:text-slate-100">{savedRecursive ? 'yes' : 'no'}</dd></div>
+                  </dl>
+                ) : null}
+                {sourceKind === 'WEBHOOK_RECEIVER' ? (
+                  <p className="text-[12px] text-slate-600 dark:text-gdc-muted">
+                    Webhook receivers cannot live-fetch. Standalone Test uses the operator <span className="font-semibold">sample_payload</span> from the saved source when present.
+                  </p>
+                ) : null}
+                {sourceKind === 'AI_PROXY_RECEIVER' || sourceKind === 'UNSUPPORTED' ? (
+                  <p data-testid="standalone-unsupported-source" className="rounded-md border border-amber-200/80 bg-amber-500/[0.07] p-3 text-[12px] text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100">
+                    {statusMessage ?? 'Sample Not Available'}
+                    {statusHint ? <span className="mt-1 block text-[11px] opacity-90">{statusHint}</span> : null}
+                  </p>
+                ) : null}
+                {sourceKind === 'S3_OBJECT_POLLING' || sourceKind === 'DATABASE_QUERY' || sourceKind === 'REMOTE_FILE_POLLING' ? (
+                  <button
+                    type="button"
+                    data-testid="standalone-source-test-run"
+                    onClick={() => void sendRequest()}
+                    disabled={requestBusy || numericId == null || configLoading}
+                    className="inline-flex h-9 items-center gap-1.5 rounded-md bg-violet-600 px-3 text-[12px] font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-70"
+                  >
+                    {requestBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                    Run Test
+                  </button>
+                ) : null}
+                {sendError ? <p className="text-[12px] font-medium text-red-700 dark:text-red-300">{sendError}</p> : null}
+              </div>
+            ) : (
+            <>
             <div className="mt-4 flex flex-col gap-3 lg:flex-row">
               <div className="flex min-w-0 flex-1 gap-2">
                 <label className="sr-only" htmlFor="api-method">
@@ -723,6 +900,7 @@ export function StreamApiTestPage() {
               <div className="flex shrink-0 gap-2">
                 <button
                   type="button"
+                  data-testid="standalone-source-test-run"
                   onClick={() => void sendRequest()}
                   disabled={requestBusy || numericId == null || configLoading}
                   className="inline-flex h-9 items-center gap-1.5 rounded-md bg-violet-600 px-3 text-[12px] font-semibold text-white shadow-sm hover:bg-violet-700 disabled:opacity-70"
@@ -748,7 +926,7 @@ export function StreamApiTestPage() {
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <span className="text-[11px] font-medium text-slate-500 dark:text-gdc-muted">Authentication</span>
               <span className="text-[11px] text-slate-600 dark:text-gdc-muted">
-                커넥터 자격 증명은 서버 측에서 로드됩니다 (마스킹된 설정).
+                Connector credentials are loaded server-side (masked configuration).
               </span>
             </div>
 
@@ -756,7 +934,7 @@ export function StreamApiTestPage() {
               <p className="text-[11px] font-semibold text-slate-600 dark:text-gdc-muted">Headers</p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {headerChips.length === 0 ? (
-                  <span className="text-[11px] text-slate-500 dark:text-gdc-muted">(설정된 헤더 없음)</span>
+                  <span className="text-[11px] text-slate-500 dark:text-gdc-muted">(no headers configured)</span>
                 ) : (
                   headerChips.map((h) => (
                     <span
@@ -776,7 +954,7 @@ export function StreamApiTestPage() {
               <p className="text-[11px] font-semibold text-slate-600 dark:text-gdc-muted">Query Parameters</p>
               <div className="mt-2 space-y-2">
                 {queryRows.length === 0 ? (
-                  <p className="text-[11px] text-slate-500 dark:text-gdc-muted">(비어 있음)</p>
+                  <p className="text-[11px] text-slate-500 dark:text-gdc-muted">(empty)</p>
                 ) : (
                   queryRows.map((row, idx) => (
                     <div key={`${row.key}-${idx}`} className="flex flex-wrap gap-2">
@@ -836,12 +1014,14 @@ export function StreamApiTestPage() {
                 />
               </label>
               <div className="text-[11px] text-slate-600 dark:text-gdc-muted">
-                <p className="font-semibold text-slate-700 dark:text-gdc-mutedStrong">Mapping (저장된 값)</p>
+                <p className="font-semibold text-slate-700 dark:text-gdc-mutedStrong">Mapping (saved)</p>
                 <p className="mt-1 font-mono text-[10px]">event_array_path: {mappingEventArrayPath || '—'}</p>
                 <p className="font-mono text-[10px]">event_root_path: {mappingEventRootPath || '—'}</p>
               </div>
             </div>
             {sendError ? <p className="mt-2 text-[12px] font-medium text-red-700 dark:text-red-300">{sendError}</p> : null}
+            </>
+            )}
           </section>
 
           <section className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-gdc-border dark:bg-gdc-card">
@@ -867,9 +1047,24 @@ export function StreamApiTestPage() {
               ))}
             </div>
             <div className="mt-3">
-              {responseTab === 'json' ? <JsonCodeView text={jsonText} /> : null}
-              {responseTab === 'raw' ? <JsonCodeView text={rawText} /> : null}
-              {responseTab === 'headers' ? <JsonCodeView text={headersText} /> : null}
+              {!sampleAvailable ? (
+                <p
+                  data-testid={sampleStatus === 'no_records' ? 'standalone-sample-no-records' : 'standalone-sample-not-available'}
+                  className="rounded-md border border-amber-200/80 bg-amber-500/[0.07] p-3 text-[12px] text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
+                >
+                  {sampleStatus === 'no_records'
+                    ? `${standaloneConnectionStatusLabel(connectionStatus)} / ${standaloneSampleStatusLabel(sampleStatus)}`
+                    : standaloneSampleStatusLabel(sampleStatus)}
+                  {statusMessage ? <span className="mt-1 block">{statusMessage}</span> : null}
+                  {statusHint ? <span className="mt-1 block text-[11px] opacity-90">{statusHint}</span> : null}
+                </p>
+              ) : (
+                <>
+                  {responseTab === 'json' ? <JsonCodeView text={jsonText} /> : null}
+                  {responseTab === 'raw' ? <JsonCodeView text={rawText} /> : null}
+                  {responseTab === 'headers' ? <JsonCodeView text={headersText} /> : null}
+                </>
+              )}
             </div>
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-2 font-mono text-[10px] text-slate-500 dark:border-gdc-border dark:text-gdc-muted">
               <span>
@@ -902,16 +1097,20 @@ export function StreamApiTestPage() {
               />
             </div>
             <div className="mt-3 max-h-[min(320px,50vh)] overflow-auto rounded-lg border border-slate-200/80 bg-slate-50/80 p-2 dark:border-gdc-border dark:bg-gdc-card">
-              <JsonTree
-                value={previewRoot}
-                path="$"
-                depth={0}
-                search={treeSearch}
-                expanded={expanded}
-                selectedPath={selectedTreePath}
-                onToggle={handleToggle}
-                onSelect={handleTreeSelect}
-              />
+              {previewRoot == null ? (
+                <p className="p-2 text-[12px] text-slate-500 dark:text-gdc-muted">No actual sample to display.</p>
+              ) : (
+                <JsonTree
+                  value={previewRoot}
+                  path="$"
+                  depth={0}
+                  search={treeSearch}
+                  expanded={expanded}
+                  selectedPath={selectedTreePath}
+                  onToggle={handleToggle}
+                  onSelect={handleTreeSelect}
+                />
+              )}
             </div>
           </section>
 
@@ -1039,7 +1238,7 @@ export function StreamApiTestPage() {
               </p>
             ) : (
               <p className="mt-2 text-[12px] text-amber-700 dark:text-amber-400">
-                Send Request 후 경로가 배열을 가리키는지 확인하세요.
+                Load an actual sample, then confirm the path points at an array.
               </p>
             )}
             {extractionValidationMessage ? (
@@ -1053,9 +1252,27 @@ export function StreamApiTestPage() {
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Status Summary</h3>
             <ul className="mt-3 space-y-2 text-[12px]">
               <li className="flex items-center justify-between gap-2">
-                <span className="text-slate-500">HTTP status</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{statsStatus ?? '—'}</span>
+                <span className="text-slate-500">Source type</span>
+                <span className="font-mono font-semibold text-slate-800 dark:text-slate-100">{sourceKind}</span>
               </li>
+              <li className="flex items-center justify-between gap-2">
+                <span className="text-slate-500">Connection</span>
+                <span data-testid="standalone-connection-status" className="font-semibold text-slate-800 dark:text-slate-100">
+                  {standaloneConnectionStatusLabel(connectionStatus)}
+                </span>
+              </li>
+              <li className="flex items-center justify-between gap-2">
+                <span className="text-slate-500">Sample</span>
+                <span data-testid="standalone-sample-status" className="font-semibold text-slate-800 dark:text-slate-100">
+                  {standaloneSampleStatusLabel(sampleStatus)}
+                </span>
+              </li>
+              {sourceKind === 'HTTP_API_POLLING' ? (
+                <li className="flex items-center justify-between gap-2">
+                  <span className="text-slate-500">HTTP status</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100">{statsStatus ?? '—'}</span>
+                </li>
+              ) : null}
               <li className="flex justify-between gap-2">
                 <span className="text-slate-500">Response Time</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-100">
@@ -1064,11 +1281,11 @@ export function StreamApiTestPage() {
               </li>
               <li className="flex justify-between gap-2">
                 <span className="text-slate-500">Approx size</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{formatBytes(statsSize)}</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{sampleAvailable ? formatBytes(statsSize) : '—'}</span>
               </li>
               <li className="flex justify-between gap-2">
-                <span className="text-slate-500">API ok</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{httpResult?.ok === true ? 'yes' : 'no'}</span>
+                <span className="text-slate-500">Records</span>
+                <span className="font-semibold text-slate-800 dark:text-slate-100">{sampleAvailable ? eventCount : '—'}</span>
               </li>
             </ul>
           </section>
@@ -1128,7 +1345,14 @@ export function StreamApiTestPage() {
               </div>
               <button
                 type="button"
-                disabled={requestBusy || numericId == null || configLoading}
+                disabled={
+                  requestBusy ||
+                  numericId == null ||
+                  configLoading ||
+                  sourceKind === 'WEBHOOK_RECEIVER' ||
+                  sourceKind === 'AI_PROXY_RECEIVER' ||
+                  sourceKind === 'UNSUPPORTED'
+                }
                 onClick={() => void sendRequest()}
                 className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-md border border-slate-200/90 bg-white text-[12px] font-semibold text-slate-800 shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gdc-border dark:bg-gdc-section dark:text-slate-100"
               >
@@ -1152,7 +1376,7 @@ export function StreamApiTestPage() {
               </li>
             </ol>
             <p className="mt-2 text-[10px] text-slate-500 dark:text-gdc-muted">
-              이 페이지는 저장된 스트림/소스 설정과 런타임 HTTP 테스트 API를 사용합니다.
+              This page uses the saved stream/source configuration and the existing runtime preview contract. Connection success is not the same as sample available.
             </p>
           </section>
 

@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-07-17T10:03:28.224Z",
+  "generated_at": "2026-08-14T12:15:34.853Z",
   "manifest_hash": "a79425f5a6470bcf375d41b8caa6d33e1bbbd8c8a1b52c70cf4b70f773d8a713",
-  "applicability_rules_hash": "edded444b2a90059dd0f0ffc64e5c9bf799291e21aa3815a47679afb16d44336",
-  "axes_hash": "80eb6c06bdced7b3cbb2c16f9b8646d536a0609f656c4aab6223d12c3ab61584",
+  "applicability_rules_hash": "9c119d44f2296afb3a40b92fb36b58004a0230bd929f0efc8ee1a15fc1a95997",
+  "axes_hash": "1c27386171036654d39f0ac4532e6e2a7bc273c3c7be4f7d02b2fb6adb972afa",
   "candidate_combinations": 40428,
   "candidate_emissions": 42228,
   "duplicate_emissions": 1800,
-  "valid_combinations": 32184,
-  "not_applicable_combinations": 8244,
+  "valid_combinations": 35484,
+  "not_applicable_combinations": 4944,
   "not_implemented_combinations": 0,
   "not_implemented_capability_ids": [
     "auth.destination.webhook_headers",
@@ -43,25 +43,25 @@
     "source__source-ai-proxy-receiver__runtime_only",
     "wizard__wizard-step-route-processing__partial"
   ],
-  "browser_combinations": 11970,
+  "browser_combinations": 15270,
   "api_combinations": 20214,
   "route_off_combinations": 4818,
-  "route_on_combinations": 27366,
+  "route_on_combinations": 30666,
   "by_source": {
-    "HTTP_API_POLLING": 20238,
-    "S3_OBJECT_POLLING": 2092,
-    "DATABASE_QUERY": 2092,
-    "REMOTE_FILE_POLLING": 2092,
-    "WEBHOOK_RECEIVER": 5670
+    "HTTP_API_POLLING": 22218,
+    "S3_OBJECT_POLLING": 2312,
+    "DATABASE_QUERY": 2312,
+    "REMOTE_FILE_POLLING": 2312,
+    "WEBHOOK_RECEIVER": 6330
   },
   "by_destination": {
-    "WEBHOOK_POST": 6456,
-    "SYSLOG_UDP": 6396,
-    "SYSLOG_TCP": 6396,
-    "SYSLOG_TLS": 12936
+    "WEBHOOK_POST": 7116,
+    "SYSLOG_UDP": 7056,
+    "SYSLOG_TCP": 7056,
+    "SYSLOG_TLS": 14256
   },
   "by_fault": {
-    "NONE": 28890,
+    "NONE": 32190,
     "http_401": 270,
     "http_403": 270,
     "http_429": 270,
@@ -79,11 +79,10 @@
     "sftp_unavailable": 30
   },
   "by_rule_reject": {
-    "R019d_BROWSER_TRANSFORM_UI": 1650,
-    "R019f_BROWSER_ROUTE_OVERRIDE_UI": 4398,
+    "R019f_BROWSER_ROUTE_OVERRIDE_UI": 2748,
     "R019g_BROWSER_FAULT_UI": 2196
   },
-  "combination_id_set_hash": "c890661d8b1cfe48a524468324fdcd2c7e1d8a1957a749ba6421beebbbe072fc",
+  "combination_id_set_hash": "8285aec76000366b242ed98222eeea2b16afc3f3e2567ea6be32c4fec18ce6b6",
   "classification_equation_ok": true,
   "deterministic": true
 }

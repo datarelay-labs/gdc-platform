@@ -1,10 +1,16 @@
 # M13.1 Route Processing Architecture — Foundation
 
 **Milestone:** M13.1 (Route Processing Foundation)  
-**Status:** Spec only — no implementation authorized by this document  
-**Authority:** `.specify/memory/constitution.md`, Product Charter 1.2.1, Master WBS 1.2.1  
-**Architecture companion:** [`docs/architecture/route-processing-foundation-implementation-spec.md`](../../docs/architecture/route-processing-foundation-implementation-spec.md)  
-**Gap analysis:** [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)
+**Status:** CURRENT implementation spec for Route Processing runtime foundation (M13.1). §3 “today” snapshots below are historical (pre–Destination First UX).  
+**Authority:** `docs/architecture/source-of-truth-index.md`, PRODUCT-CHARTER 1.2.1, `.specify/memory/constitution.md`  
+**Architecture companion (SUPERSEDED snapshot):** [`docs/archive/historical-audits/route-processing-foundation-implementation-spec.md`](../../docs/archive/historical-audits/route-processing-foundation-implementation-spec.md)  
+**Gap analysis (SUPERSEDED snapshot):** [`docs/archive/historical-audits/route-architecture-gap-analysis.md`](../../docs/archive/historical-audits/route-architecture-gap-analysis.md)
+
+**Current product wizard (do not use §3.5 as live UX):**
+
+```text
+Connect → Sample & Record Selection → Destinations → Route Processing → Deploy
+```
 
 ---
 
@@ -107,10 +113,11 @@ Source Fetch → Extract → Schema Observation
 - ~47 `/runtime/streams/{id}/...` processing endpoints (stream-centric)
 - `/runtime/routes/{id}` — CRUD for delivery fields only
 
-### 3.5 Frontend
+### 3.5 Frontend (historical snapshot at M13.1 spec time)
 
-- Wizard: Connect → Sample → **Transform** → Destinations → Deploy (inverted vs SoT)
-- Transform step is stream-global
+- Then: Connect → Sample → Transform → Destinations → Deploy (inverted vs SoT at that time)
+- Transform step was stream-global
+- **Now:** Destination First 5-step wizard + Route Processing step (`wizard-state.ts`, STREAM-WIZARD-UX-CHARTER v5.2)
 
 ---
 
@@ -147,7 +154,7 @@ StreamRunner (sole transaction owner — no new runner class)
        Checkpoint (stream cursor, post-delivery ACK — unchanged)
 ```
 
-When `GDC_ROUTE_PROCESSING_ENABLED=false` (default): **identical to current behavior**.
+When `GDC_ROUTE_PROCESSING_ENABLED=false` (rollback / compatibility): **legacy stream-scoped path**.
 
 ### 4.3 Config resolution
 
@@ -188,7 +195,7 @@ M13.1 **in scope** — foundation only:
 
 | # | Deliverable | Owner files (future impl) |
 |---|-------------|---------------------------|
-| 1 | **Feature flag** `GDC_ROUTE_PROCESSING_ENABLED`, default `false` | settings / env |
+| 1 | **Feature flag** `GDC_ROUTE_PROCESSING_ENABLED`, default `true` (P1-4; `false` = rollback) | settings / env |
 | 2 | **`SharedBatchContext`** dataclass or equivalent | `app/runners/` |
 | 3 | **`RouteRuntimeContext`** dataclass or equivalent | `app/runners/` |
 | 4 | **`resolve_route_config()`** dual-read function | `app/runners/stream_loader.py` |
@@ -361,7 +368,7 @@ All routes on a stream consume the same `union_schema`. Implementation of Union 
 | Property | Value |
 |----------|-------|
 | Name | `GDC_ROUTE_PROCESSING_ENABLED` |
-| Default | **`false`** |
+| Default | **`true`** (P1-4 product default; `false` remains rollback) |
 | Scope | Platform / deployment (env or admin settings) |
 | Per-stream override | **Not in M13.1** — platform flag only |
 
@@ -381,7 +388,7 @@ All routes on a stream consume the same `union_schema`. Implementation of Union 
 
 ### 9.4 Safety requirements
 
-1. Default OFF in all environments until M13.2+ validation complete.
+1. Default ON (P1-4). Flag OFF remains the immediate rollback to the legacy stream-scoped path.
 2. Flag OFF must pass **full existing e2e suite** without modification to test expectations.
 3. Flag ON with empty route config must produce **equivalent delivery outcomes** to flag OFF (dual-read fallback).
 4. Flag must not disable checkpoint, fan-out, or failure policy behavior.
@@ -456,7 +463,7 @@ M13.1 is **complete** when all criteria pass:
 
 ### 11.2 Feature flag
 
-- [ ] **AC-3** `GDC_ROUTE_PROCESSING_ENABLED` exists, default **`false`**.
+- [x] **AC-3** `GDC_ROUTE_PROCESSING_ENABLED` exists, default **`true`** (P1-4). `false` remains the compatibility/rollback path.
 - [ ] **AC-4** Flag off: runtime behavior matches pre-M13.1 baseline (e2e green, no orchestration split invoked).
 
 ### 11.3 Context contracts
@@ -551,7 +558,9 @@ No test code in this spec; defines **required test matrix** for M13.1 implementa
 | **R3 — Production default off** | Deploy M13.1 with flag off | AC-4; production e2e green |
 | **R4 — M13.2+** | Populate route config tables and stage executors | Separate milestone gates |
 
-### 13.2 Rollout rules
+**Later graduation (P1-4):** Product default is `GDC_ROUTE_PROCESSING_ENABLED=true`. Rows R1–R3 describe the original M13.1 rollout, not the current default.
+
+### 13.2 Rollout rules (original M13.1)
 
 1. **Never** enable flag globally until M13.2 validates transform per route in staging.
 2. M13.1 production deploy is safe with flag **OFF** — zero operator action required.

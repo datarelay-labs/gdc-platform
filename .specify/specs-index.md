@@ -1,5 +1,9 @@
 # Spec Index
 
+**Product Source of Truth (read first):** [`docs/architecture/source-of-truth-index.md`](../docs/architecture/source-of-truth-index.md) · [`PRODUCT-CHARTER v1.2.1`](../docs/source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FINAL.txt)
+
+Route Processing implementation authority: `specs/091`–`specs/097`.
+
 ## 001 Core Architecture
 Path: `specs/001-core-architecture/spec.md`
 
@@ -481,19 +485,14 @@ Operators should understand platform health within 5 seconds.
 
 ## Global Navigation Structure
 
-Primary sidebar navigation order:
+Primary sidebar (DATA-RELAY-UX-CHARTER + current SPA):
 
 1. Dashboard
-2. Connectors
-3. Sources
-4. Streams
-5. Mappings
-6. Enrichments
-7. Destinations
-8. Routes
-9. Runtime
-10. Logs
-11. Settings
+2. Data Sources — Connectors, Streams
+3. Delivery — Destinations
+4. Administration
+
+Not primary sidebar: Mappings, Enrichments, Routes console, Governance, Runtime, Logs (contextual / RBAC deep-links; Route Processing lives inside Stream Wizard / Stream Edit).
 
 Sidebar must remain persistent, collapsible, icon-based, and active-highlighted.
 

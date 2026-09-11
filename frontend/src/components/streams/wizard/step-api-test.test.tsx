@@ -64,6 +64,6 @@ describe('StepApiTest copy', () => {
     state.connector.sourceType = 'S3_OBJECT_POLLING'
     renderStep(state)
     expect(screen.getByText(/Verifies S3 connectivity for the configured bucket/i)).toBeInTheDocument()
-    expect(screen.getByText(/how ordering aligns with the checkpoint field/i)).toBeInTheDocument()
+    expect(screen.getByText(/Union Schema is generated only from those parsed events/i)).toBeInTheDocument()
   })
 })

@@ -1,5 +1,12 @@
 # GDC Platform — v1 Readiness Checklist
 
+**Status:** SUPERSEDED  
+**Superseded By:** [`docs/release/OSS-v1.0-GA-CHECKLIST.md`](release/OSS-v1.0-GA-CHECKLIST.md), [`docs/architecture/source-of-truth-index.md`](architecture/source-of-truth-index.md)
+
+Historical pre-GA GDC checklist. Primary navigation listed here (Mappings / Enrichments / Routes as top-level) is obsolete.
+
+---
+
 This document defines what "v1 complete" means for the Generic Data Connector
 (GDC) Platform, what must pass before a v1 release, and what an operator must
 manually verify on the running system.

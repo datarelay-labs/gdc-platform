@@ -1,8 +1,11 @@
 # OSS v1.0 GA Checklist
 
-**Release:** Data Relay OSS v1.0 GA  
-**Branch:** `feature/sensitive-detection-m5-clean`  
-**Date:** 2026-06-20  
+**Status:** HISTORICAL GA CHECKLIST (2026-06-20) — item 37 and Post-GA backlog rows below are snapshot criteria, not current product defaults.
+**Current default:** `GDC_ROUTE_PROCESSING_ENABLED=true`. Schema Drift fleet count is confirmed open `StreamSchemaFieldDrift` via Runtime Snapshot. See [`KNOWN-LIMITATIONS.md`](./KNOWN-LIMITATIONS.md).
+
+**Release:** Data Relay OSS v1.0 GA
+**Branch:** `feature/sensitive-detection-m5-clean`
+**Date:** 2026-06-20
 **Use with:** [Production Checklist](./production-checklist.md) for go-live security sign-off
 
 ---

@@ -9,6 +9,9 @@ from pathlib import Path
 # entire suite. Tests that need an authenticated gate use monkeypatch on
 # ``app.config.settings`` (see tests/test_jwt_session_auth.py).
 os.environ["REQUIRE_AUTH"] = "false"
+# Production secret validation is fail-closed; pytest must stay on the development contract
+# unless a test constructs Settings(APP_ENV="production", ...) with explicit strong secrets.
+os.environ["APP_ENV"] = "development"
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[1]
 _ONTOLOGY_ENV_FILE = _PROJECT_ROOT / ".env.test.ontology"

@@ -466,6 +466,7 @@ function DeployConfigurationSummary({
 }) {
   const [expanded, setExpanded] = useState(false)
   const isRemote = state.connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = state.connector.sourceType === 'DATABASE_QUERY'
   const fullUrl = buildFullRequestUrl(state.connector.hostBaseUrl, state.stream.endpoint)
   const mergedHeaders = effectiveRequestHeaders(state.connector, state.stream)
   const mappedCount = wizardEffectiveMappedFieldCount(state)
@@ -555,11 +556,16 @@ function DeployConfigurationSummary({
               />
             </ConfigBlock>
 
-            <ConfigBlock title={isRemote ? 'Remote files' : 'Request'} edit={<EditLink stepKey="stream" onNavigateToLegacySubstep={onNavigateToLegacySubstep} />}>
+            <ConfigBlock title={isRemote ? 'Remote files' : isDb ? 'Database query' : 'Request'} edit={<EditLink stepKey="stream" onNavigateToLegacySubstep={onNavigateToLegacySubstep} />}>
               {isRemote ? (
                 <>
                   <ConfigRow label="Directory" value={state.stream.remoteDirectory.trim() || '—'} mono />
                   <ConfigRow label="File pattern" value={state.stream.filePattern.trim() || '*'} mono />
+                </>
+              ) : isDb ? (
+                <>
+                  <ConfigRow label="SQL query" value={state.stream.sqlQuery.trim() || '—'} mono />
+                  <ConfigRow label="Query timeout" value={`${state.stream.timeoutSec}s`} />
                 </>
               ) : (
                 <>

@@ -41,6 +41,9 @@ export type HarnessVersion = {
   axes_source_hash: string
   run_all_shards_hash: string
   recovery_lib_hash: string
+  parallel_lib_hash: string
+  parallel_coordinator_hash: string
+  parallel_worker_hash: string
   harness_version: string
   git_commit: string
   manifest_hash: string
@@ -119,6 +122,13 @@ export const HARNESS_SCOPE: Array<{
     required: true,
     reason: 'SYSLOG_TLS + failover + runtime_not_executed + SILENT_RUNTIME_NOOP delivery judgment regressions',
     invocation_proof: 'npx tsx e2e/cross-product/test-delivery-outcome.ts',
+  },
+  {
+    rel: 'e2e/framework/test-collector-message-key.ts',
+    category: 'collector_message_key_test',
+    required: true,
+    reason: 'Ring-buffer collector id reuse must not collapse waitForNew baseline keys',
+    invocation_proof: 'npx tsx e2e/framework/test-collector-message-key.ts',
   },
   {
     rel: 'e2e/cross-product/fixtures/composite-chain-fixture.ts',
@@ -222,6 +232,37 @@ export const HARNESS_SCOPE: Array<{
     reason: 'Python harness compute + resume preflight shared with run-all-shards',
     invocation_proof: 'resume-from-recovery-plan / run-all-shards compute_harness_version',
     componentKey: 'recovery_lib_hash',
+  },
+  {
+    rel: 'e2e/cross-product/parallel_lib.py',
+    category: 'parallel_control_plane',
+    required: true,
+    reason: 'Bounded parallel scheduler, isolation namespaces, resume reuse, merge validation',
+    invocation_proof: 'run-parallel-shards.sh → parallel-matrix-coordinator.py',
+    componentKey: 'parallel_lib_hash',
+  },
+  {
+    rel: 'e2e/cross-product/parallel-matrix-coordinator.py',
+    category: 'parallel_orchestrator',
+    required: true,
+    reason: 'Normal/Fault queue coordinator (publish serialization)',
+    invocation_proof: 'run-parallel-shards.sh → parallel-matrix-coordinator.py',
+    componentKey: 'parallel_coordinator_hash',
+  },
+  {
+    rel: 'e2e/cross-product/run-parallel-shard-worker.sh',
+    category: 'parallel_worker',
+    required: true,
+    reason: 'Isolated per-shard worker runner for parallel matrix',
+    invocation_proof: 'parallel-matrix-coordinator → run-parallel-shard-worker.sh',
+    componentKey: 'parallel_worker_hash',
+  },
+  {
+    rel: 'e2e/framework/connector-create-lock.ts',
+    category: 'connector_create_lock',
+    required: true,
+    reason: 'Cross-worker Lab API mutation lock (config version UniqueViolation)',
+    invocation_proof: 'DataRelayDriver.wrapMutatingApiRequest → withLabApiMutationLock',
   },
 ]
 
@@ -384,6 +425,9 @@ export function computeHarnessVersion(): HarnessVersion {
     axes_source_hash: componentHashes.axes_source_hash,
     run_all_shards_hash: componentHashes.run_all_shards_hash,
     recovery_lib_hash: componentHashes.recovery_lib_hash,
+    parallel_lib_hash: componentHashes.parallel_lib_hash,
+    parallel_coordinator_hash: componentHashes.parallel_coordinator_hash,
+    parallel_worker_hash: componentHashes.parallel_worker_hash,
     harness_version,
     git_commit,
     manifest_hash: gen.manifest_hash,

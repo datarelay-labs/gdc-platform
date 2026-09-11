@@ -37,7 +37,6 @@ import { PolicySimulationPanel } from './policy-simulation-panel'
 
 const CATEGORIES: { value: PolicyCategory; label: string }[] = [
   { value: 'DATA_PROTECTION', label: 'Data Protection' },
-  { value: 'AI_GOVERNANCE', label: 'AI Governance' },
   { value: 'COMPLIANCE', label: 'Compliance' },
   { value: 'CUSTOM', label: 'Custom' },
 ]

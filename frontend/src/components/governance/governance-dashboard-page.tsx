@@ -28,6 +28,7 @@ import {
   type ViolationWindow,
 } from '../../api/gdcGovernanceViolations'
 import { fetchHealthOverview } from '../../api/gdcRuntimeHealth'
+import { getOperationalSnapshot } from '../../api/operationalSnapshot'
 import { NAV_PATH } from '../../config/nav-paths'
 import { isOssReleaseMode } from '../../lib/feature-flags'
 import { canEditPolicy } from '../../lib/governance-rbac'
@@ -183,12 +184,14 @@ function WhatHappenedCard({
   description,
   tone,
   testId,
+  to,
 }: {
   count: number | null
   title: string
   description: string
   tone: 'sky' | 'amber' | 'violet' | 'orange'
   testId: string
+  to?: string
 }) {
   const toneClass = {
     sky: 'text-sky-400',
@@ -196,7 +199,7 @@ function WhatHappenedCard({
     violet: 'text-violet-400',
     orange: 'text-orange-400',
   }[tone]
-  return (
+  const body = (
     <div className={cn(governanceCardClass, 'flex min-h-[5.5rem] flex-col')} data-testid={testId}>
       <p className={cn('text-[1.5rem] font-bold tabular-nums leading-none', count == null ? 'text-slate-500' : toneClass)}>
         {count == null ? '—' : formatCount(count)}
@@ -207,6 +210,14 @@ function WhatHappenedCard({
       </p>
     </div>
   )
+  if (to) {
+    return (
+      <Link to={to} className="block transition-opacity hover:opacity-90">
+        {body}
+      </Link>
+    )
+  }
+  return body
 }
 
 export function GovernanceDashboardPage() {
@@ -266,8 +277,11 @@ export function GovernanceDashboardPage() {
 
   const loadOperationalIssues = useCallback(async () => {
     try {
-      const health = await fetchHealthOverview({ window: '24h' })
-      setOperationalIssues(deriveGovernanceOperationalIssues(health, null, []))
+      const [health, snapshot] = await Promise.all([
+        fetchHealthOverview({ window: '24h' }).catch(() => null),
+        getOperationalSnapshot().catch(() => null),
+      ])
+      setOperationalIssues(deriveGovernanceOperationalIssues(health, null, [], snapshot))
     } catch {
       /* optional enrichment — ignore failures */
     }
@@ -375,7 +389,7 @@ export function GovernanceDashboardPage() {
       },
       {
         label: schemaChanges != null ? `${formatCount(schemaChanges)} 스키마 변경을 확인하세요` : '스키마 변경 데이터 조회 불가',
-        to: NAV_PATH.streams,
+        to: `${NAV_PATH.streams}?filter=schema-drift`,
         tone: 'green' as const,
         testId: 'gov-action-schema-drift',
       },
@@ -428,6 +442,17 @@ export function GovernanceDashboardPage() {
           </h1>
           <p className="mt-0.5 text-[13px] text-slate-500 dark:text-gdc-muted">
             Policy posture, violations, and compliance at a glance.
+          </p>
+          <p className="mt-1.5 text-[12px] text-slate-500 dark:text-gdc-muted">
+            Stream and route processing configuration is set in Stream Wizard / Route Processing.{' '}
+            <Link
+              to={NAV_PATH.governanceWorkspace}
+              className="font-semibold text-violet-700 hover:underline dark:text-violet-300"
+              data-testid="gov-dashboard-workspace-link"
+            >
+              Open Governance Workspace
+            </Link>{' '}
+            for a read-only inheritance overview.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -533,6 +558,7 @@ export function GovernanceDashboardPage() {
             description="스키마 변경이 감지되었습니다."
             tone="violet"
             testId="gov-issue-schema-drift"
+            to={`${NAV_PATH.streams}?filter=schema-drift`}
           />
           <WhatHappenedCard
             count={operationalIssues.destinationCapacityWarnings}

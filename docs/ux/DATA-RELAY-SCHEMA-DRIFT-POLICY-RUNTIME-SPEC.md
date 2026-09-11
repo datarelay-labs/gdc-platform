@@ -1,8 +1,8 @@
 # DATA RELAY — Schema Drift Policy Runtime Spec
 
 **Document:** `DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md`  
-**Status:** Draft — implementation authority for Schema Drift Policy Runtime (Wizard → Deploy → StreamRunner)  
-**Date:** 2026-06-14  
+**Status:** CURRENT — Stream-scoped Schema Drift Policy Runtime (Wizard → Deploy → StreamRunner)  
+**Date:** 2026-06-14; intro aligned 2026-08-13  
 **Related:** `specs/065-protection-engine/spec.md`, `specs/002-runtime-pipeline/spec.md`, `.specify/memory/constitution.md` (checkpoint rule)
 
 ---
@@ -11,7 +11,7 @@
 
 Stream Wizard에서 사용자가 선택한 **Schema Drift Policy**가 Runtime에서 실제로 적용되도록 한다.
 
-현재 Wizard는 정책을 상태·Draft·Review·Deploy 화면에만 표시하고, Deploy 시 Runtime에 저장하지 않는다. 본 스펙은 **저장 위치, 적용 시점, 정책별 동작, 경로 변환, Checkpoint, Deploy 연동, Preview, 테스트**를 정의한다.
+정책은 **Stream scope**로 `streams.config_json.governance.schema_drift_policy`에 persist 된다 (Deploy). Unknown Field 기본값은 **Pass Through**. 새 필드 발견만으로 Confirmed Drift가 되지 않는다. 본 스펙은 **저장 위치, 적용 시점, 정책별 동작, 경로 변환, Checkpoint, Deploy 연동, Preview, 테스트**를 정의한다.
 
 ### Non-Goals
 

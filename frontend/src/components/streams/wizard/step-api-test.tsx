@@ -14,9 +14,13 @@ import {
   type WizardHttpApiAnalysis,
   type WizardState,
 } from './wizard-state'
-import { detectEventRootCandidates, flattenSampleFields } from './wizard-json-extract'
-import { buildApiTestSuccessPatch } from '../../../utils/wizardUnionSchema'
-import { resolveHttpApiTestResult } from './wizard-step-gates'
+import { detectEventRootCandidates } from './wizard-json-extract'
+import {
+  analysisFromParsedRecordArray,
+  buildApiTestSuccessPatch,
+  parsedRecordEvents,
+} from '../../../utils/wizardUnionSchema'
+import { resolveHttpApiTestResult, wizardCanRunLiveSampleTest } from './wizard-step-gates'
 import type { OperationalSampleId } from './wizard-operational-samples'
 import { resolveSourceTypePresentation } from '../../../utils/sourceTypePresentation'
 type StepApiTestProps = {
@@ -88,20 +92,19 @@ export function StepApiTest({
 
   const isS3 = state.connector.sourceType === 'S3_OBJECT_POLLING'
   const isRemote = state.connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = state.connector.sourceType === 'DATABASE_QUERY'
   const canRunLiveApiTest = useMemo(
-    () =>
-      state.connector.connectorId != null &&
-      state.connector.sourceId != null &&
-      (isS3 || isRemote || state.stream.endpoint.trim().length > 0) &&
-      (!isRemote || state.stream.remoteDirectory.trim().length > 0),
+    () => wizardCanRunLiveSampleTest(state),
     [
       state.connector.connectorId,
       state.connector.sourceId,
       state.connector.sourceType,
       state.stream.endpoint,
       state.stream.remoteDirectory,
+      state.stream.sqlQuery,
       isS3,
       isRemote,
+      isDb,
     ],
   )
 
@@ -125,6 +128,7 @@ export function StepApiTest({
         unionSchema: null,
         analysis: null,
       })
+      let probeOk = false
       try {
         const res = await runConnectorAuthTest({
           connector_id: state.connector.connectorId ?? undefined,
@@ -163,71 +167,83 @@ export function StepApiTest({
           })
           return
         }
-        const sample: Record<string, unknown> = {
-          id: 's3-wizard-preview',
-          message: 'Use a field path from your NDJSON or JSON objects (e.g. $.id, $.message).',
-          severity: '1',
+        probeOk = true
+        const sampleRes = await runHttpApiTest({
+          connector_id: state.connector.connectorId ?? undefined,
+          source_config: { ...buildSourceConfig(state), ...buildSourceAuthPayload(state) },
+          stream_config: buildStreamConfigPayload(state),
+          checkpoint: null,
+          fetch_sample: true,
+        })
+        const parsedBody = sampleRes.response?.parsed_json ?? null
+        const records = parsedRecordEvents(parsedBody)
+        const hasRecords = records.length > 0
+        let analysisModel = sampleRes.analysis ? mapApiAnalysis(sampleRes.analysis) : analysisFromParsedRecordArray(parsedBody)
+        if (!analysisModel && hasRecords) {
+          analysisModel = analysisFromParsedRecordArray(records)
         }
-        const analysisModel: WizardHttpApiAnalysis = {
-          responseSummary: {
-            root_type: 'object',
-            approx_size_bytes: JSON.stringify(sample).length,
-            top_level_keys: Object.keys(sample),
-            item_count_root: 1,
-            truncation: null,
-          },
-          detectedArrays: [],
-          detectedCheckpointCandidates: [],
-          sampleEvent: sample,
-          selectedEventArrayDefault: null,
-          flatPreviewFields: Object.keys(sample).map((k) => `$.${k}`),
-          eventRootCandidates: detectEventRootCandidates(sample),
-          previewError: null,
+        const samplePatch = buildApiTestSuccessPatch(hasRecords ? parsedBody : [], analysisModel)
+        const probeSummary = {
+          s3_bucket_exists: res.s3_bucket_exists,
+          s3_object_count_preview: res.s3_object_count_preview,
+          s3_sample_keys: res.s3_sample_keys,
+          s3_endpoint_reachable: res.s3_endpoint_reachable,
+          s3_auth_ok: res.s3_auth_ok,
+          s3_event_count: sampleRes.s3_event_count ?? records.length,
+          sample_object_keys: sampleRes.s3_sample_keys ?? [],
         }
         onChange({
-          status: 'success',
-          ok: true,
-          requestUrl: state.connector.hostBaseUrl || null,
-          method: 'S3_PROBE',
-          statusCode: null,
-          responseHeaders: {},
-          rawBody: JSON.stringify(
-            {
-              s3_bucket_exists: res.s3_bucket_exists,
-              s3_object_count_preview: res.s3_object_count_preview,
-              s3_sample_keys: res.s3_sample_keys,
-              s3_endpoint_reachable: res.s3_endpoint_reachable,
-              s3_auth_ok: res.s3_auth_ok,
-            },
-            null,
-            2,
-          ),
-          parsedJson: null,
-          rawResponse: res,
-          ...buildApiTestSuccessPatch(sample, analysisModel),
+          status: sampleRes.ok ? 'success' : 'error',
+          ok: Boolean(sampleRes.ok && hasRecords),
+          requestUrl: sampleRes.request?.url ?? state.connector.hostBaseUrl ?? null,
+          method: sampleRes.request?.method ?? 'S3_OBJECT_POLLING',
+          statusCode: sampleRes.response?.status_code ?? null,
+          responseHeaders: sampleRes.response?.headers ?? {},
+          rawBody: sampleRes.response?.raw_body ?? JSON.stringify(probeSummary, null, 2),
+          parsedJson: parsedBody ?? [],
+          rawResponse: parsedBody ?? sampleRes.response?.raw_body ?? probeSummary,
+          ...samplePatch,
           startedAt,
           finishedAt: Date.now(),
-          errorCode: null,
-          errorType: null,
-          errorMessage: null,
+          errorCode: sampleRes.ok ? (hasRecords ? null : 's3_sample_not_available') : sampleRes.error_type ?? 's3_sample_fetch_failed',
+          errorType: sampleRes.ok ? (hasRecords ? null : 's3_sample_not_available') : sampleRes.error_type ?? 's3_sample_fetch_failed',
+          errorMessage: sampleRes.ok
+            ? hasRecords
+              ? null
+              : 'Connection succeeded. Sample data is not available (no records). Union Schema was not generated.'
+            : sampleRes.message ?? 'S3 sample fetch failed',
           targetStatusCode: null,
-          targetResponseBody: null,
-          hint: null,
+          targetResponseBody: sampleRes.ok ? null : sampleRes.response?.raw_body ?? null,
+          hint: sampleRes.ok
+            ? hasRecords
+              ? null
+              : 'Upload at least one JSON/NDJSON object under the configured bucket and prefix, then retry sample fetch.'
+            : 'Connectivity passed. Fix object access, parser format, or prefix, then retry sample fetch.',
           apiBacked: true,
-          steps: [],
-          responseSample: res,
-          effectiveHeadersMasked: null,
-          actualRequestSent: null,
-          analysis: analysisModel,
+          steps: mapApiSteps(sampleRes.steps),
+          responseSample: hasRecords ? parsedBody : probeSummary,
+          effectiveHeadersMasked: sampleRes.request?.headers_masked ?? null,
+          actualRequestSent: sampleRes.actual_request_sent
+            ? {
+                method: sampleRes.actual_request_sent.method,
+                url: sampleRes.actual_request_sent.url,
+                endpoint: sampleRes.actual_request_sent.endpoint ?? null,
+                queryParams: sampleRes.actual_request_sent.query_params ?? {},
+                headersMasked: sampleRes.actual_request_sent.headers_masked ?? {},
+                jsonBodyMasked: sampleRes.actual_request_sent.json_body_masked ?? null,
+                timeoutSeconds: sampleRes.actual_request_sent.timeout_seconds,
+              }
+            : null,
+          analysis: sampleRes.ok ? analysisModel : null,
           s3ConnectivityPassed: true,
         })
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'S3 probe failed.'
+        const message = err instanceof Error ? err.message : probeOk ? 'S3 sample fetch failed.' : 'S3 probe failed.'
         onChange({
           status: 'error',
           ok: false,
           requestUrl: null,
-          method: null,
+          method: probeOk ? 'S3_OBJECT_POLLING' : null,
           statusCode: null,
           responseHeaders: {},
           rawBody: null,
@@ -238,19 +254,21 @@ export function StepApiTest({
           unionSchema: null,
           startedAt,
           finishedAt: Date.now(),
-          errorCode: 's3_probe_exception',
-          errorType: 's3_probe_exception',
+          errorCode: probeOk ? 's3_sample_fetch_exception' : 's3_probe_exception',
+          errorType: probeOk ? 's3_sample_fetch_exception' : 's3_probe_exception',
           errorMessage: message,
           targetStatusCode: null,
           targetResponseBody: null,
-          hint: null,
+          hint: probeOk
+            ? 'Connectivity passed. Fix object access, parser format, or prefix, then retry sample fetch.'
+            : null,
           apiBacked: true,
           steps: [],
           responseSample: null,
           effectiveHeadersMasked: null,
           actualRequestSent: null,
           analysis: null,
-          s3ConnectivityPassed: false,
+          s3ConnectivityPassed: probeOk,
         })
       } finally {
         setBusy(false)
@@ -340,33 +358,7 @@ export function StepApiTest({
           fetch_sample: true,
         })
         const parsedBody = res.response?.parsed_json ?? null
-        let analysisModel = res.analysis ? mapApiAnalysis(res.analysis) : null
-        if (
-          !analysisModel &&
-          Array.isArray(parsedBody) &&
-          parsedBody.length > 0 &&
-          typeof parsedBody[0] === 'object' &&
-          parsedBody[0] !== null &&
-          !Array.isArray(parsedBody[0])
-        ) {
-          const fe = parsedBody[0] as Record<string, unknown>
-          analysisModel = {
-            responseSummary: {
-              root_type: 'array',
-              approx_size_bytes: JSON.stringify(parsedBody).length,
-              top_level_keys: [],
-              item_count_root: parsedBody.length,
-              truncation: null,
-            },
-            detectedArrays: [],
-            detectedCheckpointCandidates: [],
-            sampleEvent: fe,
-            selectedEventArrayDefault: '$',
-            flatPreviewFields: flattenSampleFields(fe),
-            eventRootCandidates: detectEventRootCandidates(fe),
-            previewError: null,
-          }
-        }
+        let analysisModel = res.analysis ? mapApiAnalysis(res.analysis) : analysisFromParsedRecordArray(parsedBody)
         const statusCode = res.response?.status_code ?? null
         const hasPayload = parsedBody != null || (res.response?.raw_body ?? null) != null
         const outcome = resolveHttpApiTestResult(statusCode, hasPayload)
@@ -444,6 +436,166 @@ export function StepApiTest({
           analysis: null,
           s3ConnectivityPassed: false,
           remoteProbe: lastProbe,
+        })
+      } finally {
+        setBusy(false)
+      }
+      return
+    }
+
+    if (isDb) {
+      setBusy(true)
+      const startedAt = Date.now()
+      onChange({
+        ...state.apiTest,
+        status: 'running',
+        startedAt,
+        finishedAt: null,
+        errorCode: null,
+        errorType: null,
+        errorMessage: null,
+        s3ConnectivityPassed: false,
+        dbConnectivityPassed: false,
+        extractedEvents: [],
+        eventCount: 0,
+        unionSchema: null,
+        analysis: null,
+      })
+      let probeOk = false
+      try {
+        const res = await runConnectorAuthTest({
+          connector_id: state.connector.connectorId ?? undefined,
+          method: 'GET',
+          test_path: '/',
+        })
+        if (!res.ok) {
+          onChange({
+            status: 'error',
+            ok: false,
+            requestUrl: null,
+            method: 'DATABASE_QUERY',
+            statusCode: null,
+            responseHeaders: {},
+            rawBody: JSON.stringify(res, null, 2),
+            parsedJson: null,
+            rawResponse: res,
+            extractedEvents: [],
+            eventCount: 0,
+            unionSchema: null,
+            startedAt,
+            finishedAt: Date.now(),
+            errorCode: res.error_type ?? 'database_probe_failed',
+            errorType: res.error_type ?? 'database_probe_failed',
+            errorMessage: res.message ?? 'Database connectivity probe failed',
+            targetStatusCode: null,
+            targetResponseBody: null,
+            hint: 'Verify host, database name, credentials, and db_type (PostgreSQL).',
+            apiBacked: true,
+            steps: [],
+            responseSample: null,
+            effectiveHeadersMasked: null,
+            actualRequestSent: null,
+            analysis: null,
+            s3ConnectivityPassed: false,
+            dbConnectivityPassed: false,
+          })
+          return
+        }
+        probeOk = true
+        const sampleRes = await runHttpApiTest({
+          connector_id: state.connector.connectorId ?? undefined,
+          source_config: { ...buildSourceConfig(state), ...buildSourceAuthPayload(state) },
+          stream_config: buildStreamConfigPayload(state),
+          checkpoint: null,
+          fetch_sample: true,
+        })
+        const parsedBody = sampleRes.database_query_sample_rows ?? sampleRes.response?.parsed_json ?? null
+        const records = parsedRecordEvents(parsedBody)
+        const hasRecords = records.length > 0
+        let analysisModel = sampleRes.analysis ? mapApiAnalysis(sampleRes.analysis) : analysisFromParsedRecordArray(parsedBody)
+        if (!analysisModel && hasRecords) {
+          analysisModel = analysisFromParsedRecordArray(records)
+        }
+        const samplePatch = buildApiTestSuccessPatch(hasRecords ? parsedBody : [], analysisModel)
+        onChange({
+          status: sampleRes.ok ? 'success' : 'error',
+          ok: Boolean(sampleRes.ok && hasRecords),
+          requestUrl: sampleRes.request?.url ?? null,
+          method: sampleRes.request?.method ?? 'DATABASE_QUERY',
+          statusCode: sampleRes.response?.status_code ?? (sampleRes.ok ? 200 : null),
+          responseHeaders: sampleRes.response?.headers ?? {},
+          rawBody: sampleRes.response?.raw_body ?? null,
+          parsedJson: parsedBody,
+          rawResponse: parsedBody ?? sampleRes.response?.raw_body ?? null,
+          ...samplePatch,
+          startedAt,
+          finishedAt: Date.now(),
+          errorCode: sampleRes.ok ? (hasRecords ? null : 'no_records') : sampleRes.error_type ?? 'database_query_failed',
+          errorType: sampleRes.ok ? (hasRecords ? null : 'no_records') : sampleRes.error_type ?? 'database_query_failed',
+          errorMessage: sampleRes.ok
+            ? hasRecords
+              ? null
+              : 'Connection succeeded. Query succeeded. Sample data is not available (no records). Union Schema was not generated.'
+            : sampleRes.message ?? 'Database query sample fetch failed',
+          targetStatusCode: sampleRes.ok ? null : sampleRes.response?.status_code ?? null,
+          targetResponseBody: sampleRes.ok ? null : sampleRes.response?.raw_body ?? null,
+          hint: sampleRes.ok
+            ? hasRecords
+              ? null
+              : 'The query ran successfully but returned no rows. Union Schema is generated only from actual sample rows.'
+            : 'Verify the SQL query (SELECT-only) and that the connection can read the target tables.',
+          apiBacked: true,
+          steps: mapApiSteps(sampleRes.steps),
+          responseSample: parsedBody,
+          effectiveHeadersMasked: sampleRes.request?.headers_masked ?? null,
+          actualRequestSent: sampleRes.actual_request_sent
+            ? {
+                method: sampleRes.actual_request_sent.method,
+                url: sampleRes.actual_request_sent.url,
+                endpoint: sampleRes.actual_request_sent.endpoint ?? null,
+                queryParams: sampleRes.actual_request_sent.query_params ?? {},
+                headersMasked: sampleRes.actual_request_sent.headers_masked ?? {},
+                jsonBodyMasked: sampleRes.actual_request_sent.json_body_masked ?? null,
+                timeoutSeconds: sampleRes.actual_request_sent.timeout_seconds,
+              }
+            : null,
+          analysis: sampleRes.ok ? analysisModel : state.apiTest.analysis,
+          s3ConnectivityPassed: false,
+          dbConnectivityPassed: probeOk,
+        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Database query sample fetch failed.'
+        onChange({
+          status: 'error',
+          ok: false,
+          requestUrl: null,
+          method: 'DATABASE_QUERY',
+          statusCode: null,
+          responseHeaders: {},
+          rawBody: null,
+          parsedJson: null,
+          rawResponse: null,
+          extractedEvents: [],
+          eventCount: 0,
+          unionSchema: null,
+          startedAt,
+          finishedAt: Date.now(),
+          errorCode: probeOk ? 'database_sample_fetch_exception' : 'database_probe_exception',
+          errorType: probeOk ? 'database_sample_fetch_exception' : 'database_probe_exception',
+          errorMessage: message,
+          targetStatusCode: null,
+          targetResponseBody: null,
+          hint: probeOk
+            ? 'Connectivity passed. Fix the SQL query or table access, then retry sample fetch.'
+            : 'Verify host, database name, credentials, and db_type (PostgreSQL).',
+          apiBacked: true,
+          steps: [],
+          responseSample: null,
+          effectiveHeadersMasked: null,
+          actualRequestSent: null,
+          analysis: null,
+          s3ConnectivityPassed: false,
+          dbConnectivityPassed: probeOk,
         })
       } finally {
         setBusy(false)
@@ -723,6 +875,15 @@ export function StepApiTest({
               statusCode={t.statusCode}
               elapsedMs={elapsedMs}
             />
+            {!t.ok || t.eventCount === 0 ? (
+              <p
+                data-testid="wizard-run-test-no-records"
+                className="rounded-md border border-amber-200/80 bg-amber-500/[0.07] p-3 text-[12px] text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
+              >
+                {t.errorMessage ??
+                  'Sample data is not available (no records). Union Schema was not generated.'}
+              </p>
+            ) : null}
             {onAdvanceToRecordSelection ? (
               <div className="flex justify-end">
                 <button
@@ -759,7 +920,9 @@ function SuccessPanel({
     ? apiBacked
       ? 'Success · API-backed'
       : 'Success · local preview'
-    : 'Completed with warnings'
+    : eventCount === 0
+      ? 'Connection succeeded · no records'
+      : 'Completed with warnings'
   const httpLabel = statusCode != null ? String(statusCode) : '—'
 
   return (
@@ -771,7 +934,11 @@ function SuccessPanel({
         icon={<CheckCircle2 className="h-3.5 w-3.5" aria-hidden />}
       />
       <Stat label="HTTP Status" value={httpLabel} />
-      <Stat label="Records Detected" value={`${eventCount}`} />
+      <Stat
+        tone={eventCount === 0 ? 'warning' : 'neutral'}
+        label="Sample Data"
+        value={eventCount === 0 ? 'Not available / no records' : `${eventCount} record(s)`}
+      />
       <Stat label="Latency" value={elapsedMs != null ? `${elapsedMs} ms` : '—'} />
     </div>
   )

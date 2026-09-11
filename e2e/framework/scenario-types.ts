@@ -28,6 +28,12 @@ export type LabEnv = {
   syslogPort: number
   syslogTlsPort: number
   namePrefix: string
+  /** S3 object prefix for this worker/generation (defaults to full-e2e/). */
+  s3Prefix: string
+  /** Collector isolation token; empty means shared/legacy collectors. */
+  collectorChannel: string
+  /** SFTP remote directory for this worker (defaults to /upload/full-e2e). */
+  sftpDirectory: string
   routeProcessingEnabled: boolean
   requireAuth: boolean
   minioEndpoint: string

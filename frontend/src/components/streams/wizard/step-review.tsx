@@ -169,7 +169,9 @@ function dataPolicySummaryLabel(state: WizardState): string {
       ? 'Quarantine on RESTRICTED'
       : p.restrictedResponse === 'block'
         ? 'Block on RESTRICTED'
-        : 'Audit on RESTRICTED'
+        : p.restrictedResponse === 'require_review'
+          ? 'Review on RESTRICTED'
+          : 'Continue on RESTRICTED'
   return `${preset} preset · ${mask} · ${restricted}`
 }
 
@@ -183,6 +185,7 @@ export function StepReview({
   const completion = useMemo(() => computeLegacySubstepCompletion(state), [state])
   const isS3 = state.connector.sourceType === 'S3_OBJECT_POLLING'
   const isRemote = state.connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = state.connector.sourceType === 'DATABASE_QUERY'
   const fullUrl = buildFullRequestUrl(state.connector.hostBaseUrl, state.stream.endpoint)
   const mergedHeaders = effectiveRequestHeaders(state.connector, state.stream)
 
@@ -605,7 +608,7 @@ export function StepReview({
         <section className="rounded-xl border border-slate-200/80 bg-white p-4 shadow-sm dark:border-gdc-border dark:bg-gdc-card">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
-              {isRemote ? 'Remote files' : 'HTTP Request'}
+              {isRemote ? 'Remote files' : isDb ? 'Database query' : 'HTTP Request'}
             </p>
             <EditLink stepKey="stream" onNavigateToStep={onNavigateToStep} />
           </div>
@@ -617,6 +620,12 @@ export function StepReview({
               <ReviewDlRow label="Recursive" value={state.stream.remoteRecursive ? 'yes' : 'no'} />
               <ReviewDlRow label="Max files / max MB" value={`${state.stream.maxFilesPerRun} / ${state.stream.maxFileSizeMb}`} />
               <ReviewDlRow label="Encoding" value={state.stream.encoding.trim() || 'utf-8'} />
+              <ReviewDlRow label="Event array path" mono value={eventArrayDisplay} />
+            </dl>
+          ) : isDb ? (
+            <dl className="mt-3 space-y-2 text-[12px]">
+              <ReviewDlRow label="SQL query" mono value={state.stream.sqlQuery.trim() || '—'} />
+              <ReviewDlRow label="Query timeout" value={`${state.stream.timeoutSec}s`} />
               <ReviewDlRow label="Event array path" mono value={eventArrayDisplay} />
             </dl>
           ) : (

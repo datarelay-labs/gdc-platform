@@ -2,10 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   deriveDashboardKpisFromSnapshot,
   deriveFlowBreakdownFromSnapshot,
+  deriveOverallHealthBeacon,
   deriveOverallHealthFromSnapshot,
+  derivePrimaryOperationalIssueStrip,
+  derivePrimaryTrafficKpisFromSnapshot,
   deriveTrafficOverviewFromSnapshot,
   deriveOperationalIssuesFromSnapshot,
+  deriveFleetSchemaDriftFromSnapshot,
   deriveRecentAlertsSummary,
+  deriveStreamGroupHealthFromSnapshot,
   SNAPSHOT_KPI_BASIS_LABEL,
 } from './dashboard-charter-metrics'
 import type { ConnectorRead } from '../../api/gdcConnectors'
@@ -191,9 +196,28 @@ describe('dashboard-charter-metrics', () => {
     expect(deriveOperationalIssuesFromSnapshot(snapshot(), dashboard)).toEqual({
       noDataStreams: 1,
       lowVolumeStreams: 1,
-      schemaDriftCount: 1,
+      schemaDriftCount: 0,
       destinationCapacityWarnings: null,
     })
+  })
+
+  it('counts confirmed open schema field drifts from snapshot, excluding resolved', () => {
+    const snap = snapshot()
+    snap.streams = [
+      { ...snap.streams[0]!, stream_id: 1, open_schema_field_drift_count: 2 },
+      { ...snap.streams[1]!, stream_id: 2, open_schema_field_drift_count: 1 },
+      { ...snap.streams[2]!, stream_id: 3, open_schema_field_drift_count: 0 },
+    ]
+    expect(deriveFleetSchemaDriftFromSnapshot(snap)).toEqual({ openDriftCount: 3, affectedStreamCount: 2 })
+    expect(deriveOperationalIssuesFromSnapshot(snap, null).schemaDriftCount).toBe(3)
+    expect(derivePrimaryOperationalIssueStrip(snap, null).find((i) => i.id === 'schema-drift')?.count).toBe(3)
+  })
+
+  it('treats resolved-only and missing drift counts as zero fleet schema drift', () => {
+    const resolvedOnly = snapshot()
+    resolvedOnly.streams = [{ ...resolvedOnly.streams[0]!, open_schema_field_drift_count: 0 }]
+    expect(deriveFleetSchemaDriftFromSnapshot(resolvedOnly)).toEqual({ openDriftCount: 0, affectedStreamCount: 0 })
+    expect(derivePrimaryOperationalIssueStrip(snapshot(), null).find((i) => i.id === 'schema-drift')?.count).toBe(0)
   })
 
   it('summarizes alert presence without detail', () => {
@@ -259,5 +283,75 @@ describe('dashboard-charter-metrics', () => {
       { label: 'API', count: 1 },
     ])
     expect(breakdown.destinations).toEqual([{ label: 'API', count: 1 }])
+  })
+
+  it('maps overall health beacon labels to Healthy / Warning / Critical', () => {
+    expect(
+      deriveOverallHealthBeacon(snapshot(), { total: 0, critical: 0, warning: 0, hasAlerts: false }).label,
+    ).toBe('Warning')
+    expect(
+      deriveOverallHealthBeacon(snapshot(), { total: 1, critical: 1, warning: 0, hasAlerts: true }).label,
+    ).toBe('Critical')
+  })
+
+  it('derives primary traffic KPIs as Incoming / Outgoing / Delivery Success', () => {
+    const kpis = derivePrimaryTrafficKpisFromSnapshot(snapshot())
+    expect(kpis.map((k) => k.id)).toEqual(['incoming-events', 'outgoing-events', 'success-rate'])
+    expect(kpis[0]?.label).toBe('Incoming Events')
+    expect(kpis[1]?.label).toBe('Outgoing Events')
+    expect(kpis[2]?.label).toBe('Delivery Success Rate')
+  })
+
+  it('limits primary operational issue strip to charter four items', () => {
+    const items = derivePrimaryOperationalIssueStrip(snapshot(), null)
+    expect(items.map((i) => i.id)).toEqual(['no-data', 'low-volume', 'schema-drift', 'capacity-warning'])
+  })
+
+  it('derives stream group health with Office365 Warning and AWS Healthy', () => {
+    const snap = snapshot()
+    snap.streams = [
+      {
+        ...snap.streams[0]!,
+        stream_id: 10,
+        stream_name: 'Stream A',
+        connector_id: 100,
+        health_status: 'HEALTHY',
+        status: 'RUNNING',
+        open_schema_field_drift_count: 2,
+      },
+      {
+        ...snap.streams[1]!,
+        stream_id: 11,
+        stream_name: 'Stream B',
+        connector_id: 100,
+        health_status: 'DEGRADED',
+        status: 'DEGRADED',
+        open_schema_field_drift_count: 1,
+      },
+      {
+        ...snap.streams[0]!,
+        stream_id: 12,
+        stream_name: 'Stream C',
+        connector_id: 200,
+        health_status: 'HEALTHY',
+        status: 'RUNNING',
+        open_schema_field_drift_count: 0,
+      },
+    ]
+    const connectors: ConnectorRead[] = [
+      { id: 100, name: 'o365', product_group: 'Office365', connector_type: 'generic_http', source_type: 'HTTP_API_POLLING' },
+      { id: 200, name: 'aws', product_group: 'AWS', connector_type: 'generic_http', source_type: 'HTTP_API_POLLING' },
+    ]
+    const groupHealth = deriveStreamGroupHealthFromSnapshot(snap, connectors)
+    const byLabel = Object.fromEntries(groupHealth.groups.map((g) => [g.productLabel, g]))
+    expect(byLabel.Office365?.worstStatus).toBe('DEGRADED')
+    expect(byLabel.AWS?.worstStatus).toBe('RUNNING')
+    expect(groupHealth.warning).toBe(1)
+    expect(groupHealth.healthy).toBe(1)
+    expect(groupHealth.critical).toBe(0)
+    const office365Drift = byLabel.Office365?.rows.reduce((n, r) => n + (r.openSchemaFieldDriftCount ?? 0), 0)
+    const awsDrift = byLabel.AWS?.rows.reduce((n, r) => n + (r.openSchemaFieldDriftCount ?? 0), 0)
+    expect(office365Drift).toBe(3)
+    expect(awsDrift).toBe(0)
   })
 })

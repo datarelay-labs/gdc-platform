@@ -1,14 +1,17 @@
 import type { StreamConsoleRow } from '../api/streamRows'
+import type { OperationalHealthStatus, OperationalStreamSnapshot } from '../api/operationalSnapshot'
 import { resolveSourceProductLabel, type ProductStreamGroup } from './source-product-group'
 import {
   effectiveStreamSeverity,
   normalizeSeverityInput,
   type StreamOperationalSeverity,
 } from './stream-operational-status'
-import type { StreamsMetricsWindow } from '../constants/streamConsoleFilters'
+import type { StreamsMetricsWindow, StreamsOperationalFilter } from '../constants/streamConsoleFilters'
 import { deriveStreamIssueCauses } from './stream-console-issue-causes'
 
 export type StreamsQuickFilter = 'all' | 'healthy' | 'warning' | 'critical' | 'issues'
+
+export type { StreamsOperationalFilter }
 
 export type StreamOperationsSummary = {
   healthy: number
@@ -60,6 +63,43 @@ export function matchesQuickFilter(row: StreamConsoleRow, filter: StreamsQuickFi
   return true
 }
 
+/**
+ * Dashboard-aligned operational issue filter using snapshot health_status
+ * (IDLE = no-data, DEGRADED = low-volume) — same criteria as dashboard charter metrics.
+ */
+export function streamIdsMatchingOperationalFilter(
+  streams: readonly Pick<
+    OperationalStreamSnapshot,
+    'stream_id' | 'enabled' | 'health_status' | 'open_schema_field_drift_count'
+  >[],
+  filter: StreamsOperationalFilter,
+): Set<number> {
+  const out = new Set<number>()
+  for (const s of streams) {
+    if (!s.enabled) continue
+    const health = String(s.health_status ?? '').toUpperCase() as OperationalHealthStatus | string
+    if (filter === 'no-data' && health === 'IDLE') out.add(s.stream_id)
+    if (filter === 'low-volume' && health === 'DEGRADED') out.add(s.stream_id)
+    if (filter === 'schema-drift' && (s.open_schema_field_drift_count ?? 0) > 0) out.add(s.stream_id)
+  }
+  return out
+}
+
+/** Fallback when operational snapshot is not yet available. */
+export function matchesOperationalFilterFallback(
+  row: StreamConsoleRow,
+  filter: StreamsOperationalFilter,
+): boolean {
+  if (filter === 'no-data') {
+    if (!row.hasRuntimeApiSnapshot) return true
+    return row.status === 'STOPPED' && (row.eps1m ?? 0) <= 0 && row.ingestEps <= 0
+  }
+  if (filter === 'schema-drift') {
+    return (row.openSchemaFieldDriftCount ?? 0) > 0
+  }
+  return row.status === 'DEGRADED'
+}
+
 export function streamMatchesSearch(
   row: StreamConsoleRow,
   query: string,
@@ -106,9 +146,32 @@ export function filterStreamRows(input: {
   groupFilter: string
   connectorFilter: string | null
   destinationLabelsByStreamId: ReadonlyMap<number, string[]>
+  /** Dashboard drill-down: ?filter=no-data|low-volume|schema-drift */
+  operationalFilter?: StreamsOperationalFilter | null
+  /** Prefer snapshot-derived ids when available; else row fallback. */
+  operationalFilterStreamIds?: ReadonlySet<number> | null
 }): StreamConsoleRow[] {
-  const { rows, searchQuery, quickFilter, groupFilter, connectorFilter, destinationLabelsByStreamId } = input
+  const {
+    rows,
+    searchQuery,
+    quickFilter,
+    groupFilter,
+    connectorFilter,
+    destinationLabelsByStreamId,
+    operationalFilter = null,
+    operationalFilterStreamIds = null,
+  } = input
   let out = rows.filter((row) => matchesQuickFilter(row, quickFilter))
+  if (operationalFilter) {
+    if (operationalFilterStreamIds) {
+      out = out.filter((row) => {
+        const sid = Number(row.id)
+        return Number.isFinite(sid) && operationalFilterStreamIds.has(sid)
+      })
+    } else {
+      out = out.filter((row) => matchesOperationalFilterFallback(row, operationalFilter))
+    }
+  }
   if (connectorFilter) {
     out = out.filter((row) => streamMatchesConnectorFilter(row, connectorFilter))
   }

@@ -2508,7 +2508,7 @@ def get_destination_ui_config(db: Session, destination_id: int) -> DestinationUI
             name=str(destination.name),
             destination_type=str(destination.destination_type),
             enabled=bool(destination.enabled),
-            config_json=dict(destination.config_json or {}),
+            config_json=mask_secrets(dict(destination.config_json or {})),
             rate_limit_json=dict(destination.rate_limit_json or {}),
         ),
         routes=route_items,

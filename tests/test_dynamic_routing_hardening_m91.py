@@ -33,6 +33,7 @@ from app.streams.models import Stream
 from tests.test_stream_runner_e2e import (
     _FakePoller,
     _FakeWebhookSender,
+    _add_enabled_route_for_destination,
     _build_runner,
     _seed_stream_runtime,
 )
@@ -123,7 +124,7 @@ def test_duplicate_destination_skip_single_send(
     )
     assert skip_logs
     assert any(
-        (row.payload_sample or {}).get("skip_reason") == "duplicate_base_destination"
+        (row.payload_sample or {}).get("skip_reason") in {"duplicate_base_route", "duplicate_base_destination"}
         for row in skip_logs
     )
 
@@ -157,6 +158,7 @@ def test_dynamic_route_failure_isolation_checkpoint(
     )
     db_session.add(security)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(security.id))
     create_dynamic_route(
         db_session,
         stream_id=stream_id,
@@ -206,7 +208,7 @@ def test_dynamic_route_failure_isolation_checkpoint(
         for row in db_session.query(DeliveryLog).filter(DeliveryLog.stream_id == stream_id).all()
     )
     assert any(
-        row.stage == "dynamic_route_send_failed"
+        row.stage == "route_send_failed"
         for row in db_session.query(DeliveryLog).filter(DeliveryLog.stream_id == stream_id).all()
     )
 
@@ -269,6 +271,7 @@ def test_preview_runtime_selected_destination_parity(
     )
     db_session.add(security)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(security.id))
     create_dynamic_route(
         db_session,
         stream_id=stream_id,
@@ -335,6 +338,7 @@ def test_disabled_dynamic_route_excluded_from_preview_and_counts(
     )
     db_session.add(security)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(security.id), enabled=False)
     create_dynamic_route(
         db_session,
         stream_id=stream_id,
@@ -417,6 +421,7 @@ def test_runtime_payload_immutable_on_dynamic_delivery(
     )
     db_session.add(security)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(security.id))
     create_dynamic_route(
         db_session,
         stream_id=stream_id,

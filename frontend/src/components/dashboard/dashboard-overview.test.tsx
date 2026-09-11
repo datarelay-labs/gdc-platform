@@ -358,10 +358,14 @@ describe('DashboardOverview', () => {
       </MemoryRouter>,
     )
     expect(await within(mainRegion()).findByTestId('dashboard-running-badge')).toBeInTheDocument()
+    expect(within(mainRegion()).getByTestId('dashboard-overall-health-hero')).toBeInTheDocument()
     expect(within(mainRegion()).getByTestId('dashboard-overall-health-beacon')).toBeInTheDocument()
+    expect(within(mainRegion()).getByTestId('dashboard-operational-issues')).toBeInTheDocument()
     expect(within(mainRegion()).getByTestId('dashboard-system-health-summary')).toBeInTheDocument()
     expect(within(mainRegion()).getByTestId('dashboard-kpi-strip')).toBeInTheDocument()
-    expect(within(mainRegion()).getByTestId('dashboard-operational-issues')).toBeInTheDocument()
+    expect(within(mainRegion()).getByTestId('dashboard-group-kpi-strip')).toBeInTheDocument()
+    expect(within(mainRegion()).getByTestId('dashboard-group-summary')).toBeInTheDocument()
+    expect(within(mainRegion()).getByTestId('dashboard-operational-problem-details')).toBeInTheDocument()
     expect(within(mainRegion()).getByTestId('dashboard-stream-health-matrix')).toBeInTheDocument()
     expect(within(mainRegion()).getByTestId('dashboard-events-over-time')).toBeInTheDocument()
     expect(within(mainRegion()).getByTestId('dashboard-top-sources')).toBeInTheDocument()
@@ -369,7 +373,7 @@ describe('DashboardOverview', () => {
     expect(within(mainRegion()).getByTestId('dashboard-system-health')).toBeInTheDocument()
   })
 
-  it('renders overall health beacon with correct posture label', async () => {
+  it('renders overall health as Healthy / Warning / Critical', async () => {
     render(
       <MemoryRouter>
         <main>
@@ -377,12 +381,22 @@ describe('DashboardOverview', () => {
         </main>
       </MemoryRouter>,
     )
-    const beacon = await within(mainRegion()).findByTestId('dashboard-overall-health-beacon')
-    // Snapshot has DEGRADED health_status and a warning problem
-    expect(within(beacon).getByTestId('dashboard-beacon-label')).toBeInTheDocument()
+    const hero = await within(mainRegion()).findByTestId('dashboard-overall-health-hero')
+    await waitFor(() => {
+      expect(within(hero).getByTestId('dashboard-overall-posture-label')).toHaveTextContent('Critical')
+    })
+    expect(within(hero).getByTestId('dashboard-health-healthy')).toBeInTheDocument()
+    expect(within(hero).getByTestId('dashboard-health-warning')).toBeInTheDocument()
+    expect(within(hero).getByTestId('dashboard-health-critical')).toBeInTheDocument()
+
+    const beacon = within(mainRegion()).getByTestId('dashboard-overall-health-beacon')
+    // Snapshot has DEGRADED health_status, warning problem, and critical alert → Critical
+    await waitFor(() => {
+      expect(within(beacon).getByTestId('dashboard-beacon-label')).toHaveTextContent('Critical')
+    })
   })
 
-  it('renders system health summary strip with 6 items', async () => {
+  it('renders primary operational issues without checkpoint/replay in primary strip', async () => {
     render(
       <MemoryRouter>
         <main>
@@ -393,10 +407,13 @@ describe('DashboardOverview', () => {
     const strip = await within(mainRegion()).findByTestId('dashboard-system-health-summary')
     expect(within(strip).getByTestId('dashboard-summary-no-data')).toBeInTheDocument()
     expect(within(strip).getByTestId('dashboard-summary-low-volume')).toBeInTheDocument()
+    expect(within(strip).getByTestId('dashboard-summary-schema-drift')).toBeInTheDocument()
     expect(within(strip).getByTestId('dashboard-summary-capacity-warning')).toBeInTheDocument()
+    expect(within(strip).queryByTestId('dashboard-summary-checkpoint-lag')).not.toBeInTheDocument()
+    expect(within(strip).queryByTestId('dashboard-summary-replay-queue')).not.toBeInTheDocument()
   })
 
-  it('renders operational issues panel showing problems from snapshot', async () => {
+  it('drills down from capacity warning to destinations and schema drift to streams', async () => {
     render(
       <MemoryRouter>
         <main>
@@ -404,8 +421,27 @@ describe('DashboardOverview', () => {
         </main>
       </MemoryRouter>,
     )
-    const panel = await within(mainRegion()).findByTestId('dashboard-operational-issues')
-    // Snapshot has a 'Capacity' problem
+    const strip = await within(mainRegion()).findByTestId('dashboard-system-health-summary')
+    expect(within(strip).getByTestId('dashboard-summary-capacity-warning')).toHaveAttribute(
+      'href',
+      '/destinations?filter=warning',
+    )
+    expect(within(strip).getByTestId('dashboard-summary-schema-drift')).toHaveAttribute(
+      'href',
+      '/streams?filter=schema-drift',
+    )
+    expect(within(strip).getByTestId('dashboard-summary-no-data')).toHaveAttribute('href', '/streams?filter=no-data')
+  })
+
+  it('renders issue details panel showing problems from snapshot', async () => {
+    render(
+      <MemoryRouter>
+        <main>
+          <DashboardOverview />
+        </main>
+      </MemoryRouter>,
+    )
+    const panel = await within(mainRegion()).findByTestId('dashboard-operational-problem-details')
     await waitFor(() => {
       expect(within(panel).getByText(/Capacity/i)).toBeInTheDocument()
     })
@@ -516,7 +552,22 @@ describe('DashboardOverview', () => {
     expect(within(mainRegion()).getAllByText(/Last 15 min/i).length).toBeGreaterThanOrEqual(1)
   })
 
-  it('shows snapshot basis on rate KPIs and keeps ingest rate stable across window changes', async () => {
+  it('shows primary traffic KPIs for Incoming / Outgoing / Delivery Success', async () => {
+    render(
+      <MemoryRouter>
+        <main>
+          <DashboardOverview />
+        </main>
+      </MemoryRouter>,
+    )
+    const strip = await within(mainRegion()).findByTestId('dashboard-kpi-strip')
+    expect(within(strip).getByTestId('dashboard-kpi-incoming-events')).toBeInTheDocument()
+    expect(within(strip).getByTestId('dashboard-kpi-outgoing-events')).toBeInTheDocument()
+    expect(within(strip).getByTestId('dashboard-kpi-success-rate')).toBeInTheDocument()
+    expect(within(strip).queryByTestId('dashboard-kpi-delivery-gap')).not.toBeInTheDocument()
+  })
+
+  it('keeps snapshot basis on primary traffic KPIs across window changes', async () => {
     const user = userEvent.setup()
     render(
       <MemoryRouter>
@@ -526,16 +577,16 @@ describe('DashboardOverview', () => {
       </MemoryRouter>,
     )
     const strip = await within(mainRegion()).findByTestId('dashboard-kpi-strip')
-    const ingestKpi = await within(strip).findByTestId('dashboard-kpi-ingest-rate')
+    const incomingKpi = await within(strip).findByTestId('dashboard-kpi-incoming-events')
     await waitFor(() => {
-      expect(within(ingestKpi).getByText('5m snapshot')).toBeInTheDocument()
+      expect(within(incomingKpi).getByText('5m snapshot')).toBeInTheDocument()
     })
-    const valueEl = ingestKpi.querySelector('.text-\\[1\\.75rem\\]')
-    const ingestBefore = valueEl?.textContent ?? ''
+    const valueEl = incomingKpi.querySelector('.text-\\[1\\.75rem\\]')
+    const incomingBefore = valueEl?.textContent ?? ''
     await user.selectOptions(screen.getByLabelText(/Analytics window/i), '24h')
     await waitFor(() => {
-      expect(within(ingestKpi).getByText('5m snapshot')).toBeInTheDocument()
-      expect(valueEl?.textContent).toBe(ingestBefore)
+      expect(within(incomingKpi).getByText('5m snapshot')).toBeInTheDocument()
+      expect(valueEl?.textContent).toBe(incomingBefore)
     })
   })
 })

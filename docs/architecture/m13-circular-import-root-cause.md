@@ -1,5 +1,8 @@
 # M13 Circular Import — Root Cause Analysis
 
+**Status:** SUPERSEDED (historical incident record; fix already applied)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md)
+
 **Date:** 2026-06-17  
 **Blocker ID:** TD-H1 (from `m13-route-architecture-completion-audit.md`)  
 **Status:** Fixed

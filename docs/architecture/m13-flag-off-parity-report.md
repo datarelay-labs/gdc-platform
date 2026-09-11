@@ -1,7 +1,12 @@
 # M13 Flag OFF Parity Report
 
-**Date:** 2026-06-17  
-**Flag:** `GDC_ROUTE_PROCESSING_ENABLED=false` (default in `app/config.py`)  
+**Status:** SUPERSEDED (historical validation snapshot)
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), Runtime code + tests
+
+Do **not** treat the flag default recorded below as current. Product default is `GDC_ROUTE_PROCESSING_ENABLED=true` (P1-4).
+
+**Date:** 2026-06-17
+**Flag (at audit time):** `GDC_ROUTE_PROCESSING_ENABLED=false` (then the `app/config.py` default)
 **Prerequisite:** Circular import fix applied (`m13-circular-import-root-cause.md`)
 
 ---

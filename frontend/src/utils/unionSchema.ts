@@ -8,11 +8,16 @@ export type UnionSchemaField = {
   field_type: string
   occurrence_count: number
   sample_values: unknown[]
+  suggested_sensitive_type?: string | null
+  sensitivity_class?: string | null
+  detection_source?: string | null
+  detection_method?: string | null
 }
 
 export type UnionSchema = {
   total_events: number
   fields: UnionSchemaField[]
+  sensitive_suggestions_applied?: boolean
 }
 
 const MAX_SAMPLE_VALUES = 5
@@ -243,6 +248,22 @@ export function unionSchemaFromStreamConfig(
       field_type: String(field.field_type ?? 'string'),
       occurrence_count: typeof field.occurrence_count === 'number' ? field.occurrence_count : 0,
       sample_values: Array.isArray(field.sample_values) ? field.sample_values.slice(0, MAX_SAMPLE_VALUES) : [],
+      suggested_sensitive_type:
+        typeof field.suggested_sensitive_type === 'string' && field.suggested_sensitive_type.trim()
+          ? field.suggested_sensitive_type.trim()
+          : null,
+      sensitivity_class:
+        typeof field.sensitivity_class === 'string' && field.sensitivity_class.trim()
+          ? field.sensitivity_class.trim()
+          : null,
+      detection_source:
+        typeof field.detection_source === 'string' && field.detection_source.trim()
+          ? field.detection_source.trim()
+          : null,
+      detection_method:
+        typeof field.detection_method === 'string' && field.detection_method.trim()
+          ? field.detection_method.trim()
+          : null,
     })
   }
   if (fields.length === 0) return null
@@ -252,5 +273,9 @@ export function unionSchemaFromStreamConfig(
       ? record.total_events
       : Math.max(...fields.map((f) => f.occurrence_count), fields.length)
 
-  return { total_events: totalEvents, fields }
+  return {
+    total_events: totalEvents,
+    fields,
+    sensitive_suggestions_applied: record.sensitive_suggestions_applied === true,
+  }
 }

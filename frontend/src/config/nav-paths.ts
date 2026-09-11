@@ -41,17 +41,26 @@ export function newStreamPath(): string {
   return '/streams/new'
 }
 
-export function streamRuntimePath(streamId: string): string {
-  return `/streams/${encodeURIComponent(streamId)}/runtime`
+export function streamRuntimePath(streamId: string, options?: { tab?: string }): string {
+  const base = `/streams/${encodeURIComponent(streamId)}/runtime`
+  const tab = options?.tab?.trim()
+  if (tab && tab !== 'overview') {
+    const q = new URLSearchParams()
+    q.set('tab', tab)
+    return `${base}?${q.toString()}`
+  }
+  return base
 }
 
 /** Streams console with a source-product group row pre-expanded (dashboard drill-down). */
-export function streamsExpandedGroupPath(productLabel: string): string {
+export function streamsExpandedGroupPath(productLabel: string, options?: { filter?: string }): string {
   const label = productLabel.trim()
-  if (!label) return NAV_PATH.streams
+  if (!label && !options?.filter) return NAV_PATH.streams
   const q = new URLSearchParams()
-  q.set('expand_group', label)
-  return `${NAV_PATH.streams}?${q.toString()}`
+  if (options?.filter) q.set('filter', options.filter)
+  if (label) q.set('expand_group', label)
+  const qs = q.toString()
+  return qs ? `${NAV_PATH.streams}?${qs}` : NAV_PATH.streams
 }
 
 /** API test & JSON preview step (stream wizard / edit flow). */

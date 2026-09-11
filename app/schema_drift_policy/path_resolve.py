@@ -102,12 +102,14 @@ def resolve_protection_field_path(
 
     path_set = {normalize_protection_json_path(path) for path in runtime_paths}
 
+    # Prefer mapped/enriched output path even when the extracted source path is
+    # still present (Route Processing shared phase runs drift before transform).
+    aliased = alias_map.get(normalized)
+    if aliased:
+        return PathResolveResult(ok=True, resolved_path=aliased)
+
     if normalized in path_set:
         return PathResolveResult(ok=True, resolved_path=normalized)
-
-    aliased = alias_map.get(normalized)
-    if aliased and aliased in path_set:
-        return PathResolveResult(ok=True, resolved_path=aliased)
 
     leaf = _leaf_segment(normalized)
     leaf_matches = [path for path in path_set if _leaf_segment(path) == leaf]

@@ -1,11 +1,11 @@
 # M13.5 Per Route Policy
 
-**Milestone:** M13.5 (Per Route Policy)  
-**Status:** Spec only — no implementation authorized by this document  
-**Depends on:** M13.1 Route Processing Foundation (`specs/091-route-processing-architecture/spec.md`), M13.2 Per Route Transform (`specs/092-per-route-transform/spec.md`), M13.3 Per Route Protection (`specs/093-per-route-protection/spec.md`), M13.4 Per Route Classification (`specs/094-per-route-classification/spec.md`)  
-**Design review:** [`docs/architecture/route-data-model-review.md`](../../docs/architecture/route-data-model-review.md), [`docs/architecture/m13-route-architecture-design-review.md`](../../docs/architecture/m13-route-architecture-design-review.md), [`docs/architecture/m13-3-protection-design-review.md`](../../docs/architecture/m13-3-protection-design-review.md), [`docs/architecture/m13-4-classification-design-review.md`](../../docs/architecture/m13-4-classification-design-review.md), [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)  
-**Authority:** Product Charter 1.2.1, Master WBS 1.2.1, `.specify/memory/constitution.md`, Governance & Transform Policy v1.1, Governance UX Charter v1.1, Governance Workspace v1.1  
-**Architecture:** [`docs/architecture/route-processing-foundation-implementation-spec.md`](../../docs/architecture/route-processing-foundation-implementation-spec.md)  
+**Milestone:** M13.5 (Per Route Policy)
+**Status:** CURRENT implementation spec for M13.5 (delivered). Original M13 rollout assumed flag default OFF; product default is ON as of P1-4 (`false` = rollback).
+**Depends on:** M13.1 Route Processing Foundation (`specs/091-route-processing-architecture/spec.md`), M13.2 Per Route Transform (`specs/092-per-route-transform/spec.md`), M13.3 Per Route Protection (`specs/093-per-route-protection/spec.md`), M13.4 Per Route Classification (`specs/094-per-route-classification/spec.md`)
+**Design review:** [`docs/architecture/route-data-model-review.md`](../../docs/architecture/route-data-model-review.md), [`docs/architecture/m13-route-architecture-design-review.md`](../../docs/architecture/m13-route-architecture-design-review.md), [`docs/architecture/m13-3-protection-design-review.md`](../../docs/architecture/m13-3-protection-design-review.md), [`docs/architecture/m13-4-classification-design-review.md`](../../docs/architecture/m13-4-classification-design-review.md), [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)
+**Authority:** Product Charter 1.2.1, Master WBS 1.2.1, `.specify/memory/constitution.md`, Governance & Transform Policy v1.1, Governance UX Charter v1.1, Governance Workspace v1.1
+**Architecture:** [`docs/architecture/route-processing-foundation-implementation-spec.md`](../../docs/architecture/route-processing-foundation-implementation-spec.md)
 **Gap analysis:** [`docs/architecture/route-architecture-gap-analysis.md`](../../docs/architecture/route-architecture-gap-analysis.md)
 
 ---
@@ -82,7 +82,7 @@ Destinations
 | Do NOT create parallel runtime | Policy stage inside existing `process_route_pipeline()` |
 | Route Policy additive | New `route_policy_rules` table; stream table preserved |
 | Existing Streams continue working | Dual-read + flag OFF parity |
-| Feature flag default OFF | `GDC_ROUTE_PROCESSING_ENABLED=false` — legacy path unchanged |
+| Feature flag rollback path | `GDC_ROUTE_PROCESSING_ENABLED=false` — legacy path unchanged (product default is `true` as of P1-4) |
 | Do NOT redesign Route DB model | Additive `route_policy_rules` + nullable quarantine `route_id` only |
 
 ---
@@ -1024,7 +1024,7 @@ Conceptual only — no UI implementation authorized by this document.
 
 ### 17.1 Feature flag OFF
 
-`GDC_ROUTE_PROCESSING_ENABLED=false` (default):
+`GDC_ROUTE_PROCESSING_ENABLED=false` (rollback; product default is `true`):
 
 - **Zero behavior change** vs pre-M13.5 baseline
 - Stream policy runs in `_evaluate_policies()` after stream protection

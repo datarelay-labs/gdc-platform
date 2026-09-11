@@ -1,5 +1,8 @@
 # M13 Migration Audit
 
+**Status:** SUPERSEDED (historical migration snapshot)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), Alembic history
+
 **Date:** 2026-06-17  
 **Scope:** Alembic revisions `20260614_0054` – `20260616_0057`
 

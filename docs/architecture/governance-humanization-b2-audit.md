@@ -1,5 +1,8 @@
 # Governance Humanization — Commit B2 Audit
 
+**Status:** ARCHIVE_CANDIDATE (point-in-time audit)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), Governance UX charters
+
 **Date:** 2026-06-17  
 **Branch:** `feature/sensitive-detection-m5-clean` (HEAD `4751bec` — Commit B1 on `origin`)  
 **Mode:** Read-only audit — no code changes, no commit, no push

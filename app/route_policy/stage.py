@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import Callable
 from typing import Any
@@ -15,10 +16,13 @@ from app.route_policy.config import PolicyDecision, RoutePolicyConfig, RoutePoli
 from app.route_policy.decision import delivery_allowed_for_decision, merge_route_policy_decision
 from app.route_policy.resolver import resolve_route_policy_config
 from app.runners.route_context import RouteRuntimeContext, SharedBatchContext
+from app.runners.stream_runner_db import run_with_db
+from app.schema_drift_policy.orchestrator import merge_schema_drift_quarantine
 from app.sensitive_detection.context import findings_from_context
 
 
 LogFn = Callable[[dict[str, Any]], None]
+logger = logging.getLogger(__name__)
 
 
 def _findings_from_shared_batch(shared_batch: SharedBatchContext) -> list[dict[str, Any]]:
@@ -77,31 +81,57 @@ def route_policy_stage(
             findings=findings,
         )
 
+    drift_result = shared_batch.schema_drift_policy_result
+    if drift_result is not None and bool(getattr(drift_result, "should_quarantine", False)):
+        unknown_fields = list(getattr(drift_result, "unknown_fields", []) or [])
+        field_paths = [
+            str(item.enriched_path) for item in unknown_fields if getattr(item, "enriched_path", None)
+        ]
+        policy_type = str(getattr(drift_result, "quarantine_policy_type", None) or "unknown_normal")
+        policy_batch_result = merge_schema_drift_quarantine(
+            policy_batch_result,
+            policy_type=policy_type,
+            field_paths=field_paths,
+        )
+
     decision, decision_reason = merge_route_policy_decision(policy_batch_result, config)
     delivery_allowed = delivery_allowed_for_decision(decision)
     quarantine_recorded = False
     quarantine_event_id: int | None = None
 
-    if decision == "quarantine" and db is not None and input_events:
+    if decision == "quarantine" and input_events:
         drift_only = (
             not should_quarantine_batch(policy_batch_result)
             and config.resolution.drift_quarantine_required
         )
-        row = record_route_policy_quarantine_event(
-            db,
-            stream_id=route_ctx.stream_id,
-            route_id=route_ctx.route_id,
-            destination_id=route_ctx.destination_id,
-            delivery_events=input_events,
-            policy_result=policy_batch_result,
-            decision_reason=decision_reason,
-            classification_result=route_ctx.processing_state.classification_result,
-            override_delivery_behavior=config.override_delivery_behavior,
-            drift_quarantine=drift_only,
-        )
-        quarantine_recorded = row is not None
-        if row is not None:
-            quarantine_event_id = int(row.id)
+
+        def _record(session: Session) -> int | None:
+            row = record_route_policy_quarantine_event(
+                session,
+                stream_id=route_ctx.stream_id,
+                route_id=route_ctx.route_id,
+                destination_id=route_ctx.destination_id,
+                delivery_events=input_events,
+                policy_result=policy_batch_result,
+                decision_reason=decision_reason,
+                classification_result=route_ctx.processing_state.classification_result,
+                override_delivery_behavior=config.override_delivery_behavior,
+                drift_quarantine=drift_only,
+            )
+            if row is None:
+                return None
+            return int(row.id)
+
+        try:
+            quarantine_event_id = _record(db) if db is not None else run_with_db(_record, commit=True)
+        except Exception:
+            logger.exception(
+                "route_policy_quarantine_persist_failed stream_id=%s route_id=%s",
+                route_ctx.stream_id,
+                route_ctx.route_id,
+            )
+            quarantine_event_id = None
+        quarantine_recorded = quarantine_event_id is not None
 
     duration_ms = max(0, int((time.monotonic() - started) * 1000))
     output_events = input_events if delivery_allowed else []

@@ -16,7 +16,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import {
   createAdminUser,
   deleteAdminUser,
@@ -35,6 +35,8 @@ import {
 import { formatTimestampWithResolvedTimezone } from '../../lib/platform-timestamps'
 import { isDevValidationLabUiEnabled } from '../../lib/feature-flags'
 import { gdcUi, isAdminUiReadOnly, readAdminUiRole } from '../../lib/gdc-ui-tokens'
+import { canViewGovernance } from '../../lib/governance-rbac'
+import { NAV_PATH } from '../../config/nav-paths'
 import { cn } from '../../lib/utils'
 import { AdminDevValidationPanel } from './admin-dev-validation-panel'
 import { AdminDisplayTimezoneSettings } from './admin-display-timezone-settings'
@@ -379,6 +381,19 @@ export function AdminSettingsPage() {
         <p className="max-w-2xl text-[13px] leading-relaxed text-slate-600 dark:text-gdc-muted">
           Operational dashboard for HTTPS, accounts, retention, audit trail, health signals, and alerting configuration.
         </p>
+        {canViewGovernance() ? (
+          <p className="max-w-2xl text-[12px] text-slate-500 dark:text-gdc-muted">
+            Governance operations (violations, quarantine, replay) live on the{' '}
+            <Link
+              to={NAV_PATH.governance}
+              className="font-semibold text-violet-700 hover:underline dark:text-violet-300"
+              data-testid="admin-settings-governance-ops-link"
+            >
+              Governance Dashboard
+            </Link>
+            . Stream protection and policy are configured in Stream Wizard / Route Processing.
+          </p>
+        ) : null}
       </div>
 
       {readOnly ? (

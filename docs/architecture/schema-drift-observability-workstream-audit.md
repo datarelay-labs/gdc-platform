@@ -1,5 +1,8 @@
 # Schema Drift Observability Workstream Audit
 
+**Status:** ARCHIVE_CANDIDATE (point-in-time audit)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), [`DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md`](../ux/DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md)
+
 **Date:** 2026-06-17  
 **Branch:** `feature/sensitive-detection-m5-clean` (synced with `origin` at `1806a10`)  
 **Baseline:** M13 complete (`967d19b` + hotfix `1806a10`); Schema Drift **runtime** in `7c9e2e2`  

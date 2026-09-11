@@ -116,9 +116,10 @@ export function StepDataPolicy({ state, onChange }: StepDataPolicyProps) {
             label="On RESTRICTED"
             value={state.restrictedResponse}
             options={[
+              { value: 'continue', label: 'Continue' },
+              { value: 'require_review', label: 'Require Review' },
               { value: 'quarantine', label: 'Quarantine' },
               { value: 'block', label: 'Block delivery' },
-              { value: 'audit', label: 'Audit only' },
             ]}
             onChange={(v) => onChange({ restrictedResponse: v as WizardDataPolicyState['restrictedResponse'] })}
           />
@@ -126,9 +127,10 @@ export function StepDataPolicy({ state, onChange }: StepDataPolicyProps) {
             label="On CONFIDENTIAL"
             value={state.confidentialResponse}
             options={[
-              { value: 'audit', label: 'Audit only' },
-              { value: 'mask', label: 'Mask & deliver' },
+              { value: 'continue', label: 'Continue' },
+              { value: 'require_review', label: 'Require Review' },
               { value: 'quarantine', label: 'Quarantine' },
+              { value: 'block', label: 'Block delivery' },
             ]}
             onChange={(v) => onChange({ confidentialResponse: v as WizardDataPolicyState['confidentialResponse'] })}
           />

@@ -539,12 +539,13 @@ describe('App shell (phase: sidebar, header, dashboard)', () => {
     persistTestSession('CONNECTOR_OPERATOR')
     renderApp()
     const nav = screen.getByRole('complementary', { name: 'Primary navigation' })
-    for (const label of ['Connectors', 'Streams', 'Destinations', 'Routes', 'Administration']) {
+    for (const label of ['Connectors', 'Streams', 'Destinations', 'Administration']) {
       expect(within(nav).getByRole('button', { name: label })).toBeInTheDocument()
     }
     expect(within(nav).getAllByRole('button', { name: 'Dashboard' }).length).toBeGreaterThanOrEqual(1)
-    expect(nav).toHaveTextContent('Governance')
-    expect(within(nav).getByRole('button', { name: 'Governance Workspace' })).toBeInTheDocument()
+    expect(within(nav).queryByRole('button', { name: 'Routes' })).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('button', { name: 'Governance Workspace' })).not.toBeInTheDocument()
+    expect(within(nav).queryByText('Governance')).not.toBeInTheDocument()
     for (const removed of [
       'Operations',
       'Operations Center',
@@ -559,6 +560,8 @@ describe('App shell (phase: sidebar, header, dashboard)', () => {
       'AI Traffic',
       'Admin Settings',
       'Network Settings',
+      'Routes',
+      'Governance Workspace',
     ]) {
       expect(within(nav).queryByRole('button', { name: removed })).not.toBeInTheDocument()
     }
@@ -571,15 +574,17 @@ describe('App shell (phase: sidebar, header, dashboard)', () => {
     renderApp()
     const nav = screen.getByRole('complementary', { name: 'Primary navigation' })
     expect(within(nav).queryByRole('button', { name: 'Governance Workspace' })).not.toBeInTheDocument()
+    expect(within(nav).queryByText('Governance')).not.toBeInTheDocument()
     expect(within(nav).getAllByRole('button', { name: 'Dashboard' })).toHaveLength(1)
   })
 
-  it('renders Governance nav for GOVERNANCE_OPERATOR (M20 RBAC)', () => {
+  it('does not expose Governance as primary nav for GOVERNANCE_OPERATOR (M20 RBAC)', () => {
     persistTestSession('GOVERNANCE_OPERATOR')
     renderApp()
     const nav = screen.getByRole('complementary', { name: 'Primary navigation' })
-    expect(nav).toHaveTextContent('Governance')
-    expect(within(nav).getByRole('button', { name: 'Governance Workspace' })).toBeInTheDocument()
+    expect(within(nav).queryByText('Governance')).not.toBeInTheDocument()
+    expect(within(nav).queryByRole('button', { name: 'Governance Workspace' })).not.toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Destinations' })).toBeInTheDocument()
   })
 
   it('logo links to Dashboard home', () => {
@@ -720,6 +725,11 @@ describe('App shell (phase: sidebar, header, dashboard)', () => {
 
   it('redirects /runtime/ai-gateway to /streams', async () => {
     renderApp('/runtime/ai-gateway')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Streams' })).toBeInTheDocument()
+  })
+
+  it('does not expose /ai-gateway as a product route', async () => {
+    renderApp('/ai-gateway/traffic')
     expect(await screen.findByRole('heading', { level: 1, name: 'Streams' })).toBeInTheDocument()
   })
 

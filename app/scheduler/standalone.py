@@ -8,6 +8,7 @@ import threading
 import time
 
 from app.config import settings
+from app.production_security import ensure_production_security_settings
 from app.db.partition_maintenance_scheduler import (
     PartitionMaintenanceScheduler,
     register_partition_maintenance_scheduler,
@@ -31,10 +32,15 @@ logger = logging.getLogger(__name__)
 def run_standalone_scheduler() -> None:
     """Start stream scheduler and background updaters; block until SIGTERM/SIGINT."""
 
+    ensure_production_security_settings(settings)
     startup_snapshot = evaluate_startup_readiness()
     if not startup_snapshot.scheduler_active:
         logger.error("%s", {"stage": "standalone_scheduler_not_ready", "reason": "schema_or_db_unavailable"})
         raise SystemExit(1)
+
+    from app.governance_notifications.email_sender import SmtpEmailSender, set_email_sender
+
+    set_email_sender(SmtpEmailSender())
 
     stop = threading.Event()
 

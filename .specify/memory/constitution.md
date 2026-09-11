@@ -2,15 +2,24 @@
 
 ## Source of Truth
 
-This project already uses Spec Kit style specs under:
+Product authority (read first):
+
+- `docs/architecture/source-of-truth-index.md`
+- `docs/source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FINAL.txt`
+
+Runtime / implementation authority for pipeline invariants:
 
 - specs/001-core-architecture/spec.md
 - specs/002-runtime-pipeline/spec.md
 - specs/003-db-model/spec.md
 - specs/004-delivery-routing/spec.md
 - specs/048-runtime-reliability/spec.md
+- this constitution
 
-These specs and this constitution are the implementation authority.
+Route Processing implementation: `specs/091`–`specs/097`.
+
+If a document conflicts with PRODUCT-CHARTER, PRODUCT-CHARTER wins.
+If a document conflicts with verified Runtime behavior, record the conflict; do not silently change Runtime.
 
 ## Non-Negotiable Architecture Rules
 
@@ -244,19 +253,23 @@ Operators should understand platform health within 5 seconds.
 
 # Global Navigation Structure
 
-Primary sidebar navigation order:
+Primary sidebar (DATA-RELAY-UX-CHARTER + current SPA):
 
 - Dashboard
-- Connectors
-- Sources
-- Streams
-- Mappings
-- Enrichments
-- Destinations
-- Routes
-- Runtime
-- Logs
-- Settings
+- Data Sources
+  - Connectors
+  - Streams
+- Delivery
+  - Destinations
+- Administration
+
+Not primary sidebar (contextual / deep-link / RBAC-gated):
+
+- Mappings, Enrichments (inside Stream Wizard Route Processing / Stream Edit)
+- Routes console
+- Governance surfaces
+- Runtime, Logs (stream/runtime drill-down)
+- Sources as a top-level leaf (connector-scoped)
 
 Sidebar must:
 

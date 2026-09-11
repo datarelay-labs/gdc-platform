@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-PolicyActionType = Literal["audit_only", "quarantine"]
+PolicyActionType = Literal["audit_only", "quarantine", "block", "require_review"]
 PolicySensitivityClass = Literal["secret", "pii", "security_metadata"]
 PolicyClassificationLevel = Literal["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
 

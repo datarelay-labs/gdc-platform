@@ -38,6 +38,7 @@ from app.audit.router import router as audit_router
 from app.backup.router import router as backup_router
 from app.backfill.router import router as backfill_router
 from app.config import settings
+from app.production_security import ensure_production_security_settings
 from app.connectors.router import router as connectors_router
 from app.delivery.router import router as delivery_router
 from app.destinations.router import router as destinations_router
@@ -60,12 +61,6 @@ from app.connectors_registry.router import router as connectors_registry_router
 from app.connector_templates.router import router as connector_templates_router
 from app.validation.periodic_scheduler import ContinuousValidationScheduler, set_validation_scheduler
 from app.validation.router import router as validation_router
-from app.ai_gateway.router import router as ai_gateway_router
-from app.ai_providers.router import router as ai_providers_router
-from app.ai_streams.router import router as ai_streams_router
-from app.ai_audit.router import router as ai_audit_router
-from app.ai_governance.router import router as ai_governance_router
-from app.ai_policy.router import router as ai_policy_router
 from app.governance.router import router as governance_router
 from app.platform_admin.delivery_logs_index_probe import probe_delivery_logs_indexes
 
@@ -74,6 +69,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    ensure_production_security_settings(settings)
     startup_snapshot = evaluate_startup_readiness()
     try:
         bootstrap_registry()
@@ -86,6 +82,9 @@ async def lifespan(_: FastAPI):
                 "message": str(exc),
             },
         )
+    from app.governance_notifications.email_sender import SmtpEmailSender, set_email_sender
+
+    set_email_sender(SmtpEmailSender())
     if settings.APP_ENV.lower() in {"production", "prod"}:
         from app.governance_notifications.webhook_sender import HttpWebhookSender, set_webhook_sender
 
@@ -258,12 +257,8 @@ app.include_router(ingest_router, prefix=f"{_prefix}/ingest", tags=["ingest"])
 app.include_router(retention_router, prefix=f"{_prefix}/retention", tags=["retention"])
 app.include_router(delivery_router, prefix=f"{_prefix}/delivery", tags=["delivery"])
 app.include_router(validation_router, prefix=f"{_prefix}/validation", tags=["validation"])
-app.include_router(ai_providers_router, prefix=f"{_prefix}/ai-providers", tags=["ai-providers"])
-app.include_router(ai_streams_router, prefix=f"{_prefix}/ai-streams", tags=["ai-streams"])
-app.include_router(ai_policy_router, prefix=f"{_prefix}/ai-policy-rules", tags=["ai-policy-rules"])
-app.include_router(ai_audit_router, prefix=f"{_prefix}/ai-audit-events", tags=["ai-audit-events"])
-app.include_router(ai_governance_router, prefix=f"{_prefix}/ai-governance", tags=["ai-governance"])
-app.include_router(ai_gateway_router, prefix=f"{_prefix}/ai-gateway", tags=["ai-gateway"])
+# AI Gateway HTTP routers are not part of Data Relay OSS product scope.
+# Historical modules remain in-tree; do not mount them here.
 app.include_router(governance_router, prefix=f"{_prefix}/governance", tags=["governance"])
 
 

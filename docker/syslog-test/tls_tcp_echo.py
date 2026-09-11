@@ -17,6 +17,7 @@ def _serve_tls(*, certfile: str, keyfile: str, host: str = "0.0.0.0", port: int 
     sock.bind((host, port))
     sock.listen(16)
     print(f"syslog-tls-test listening on {host}:{port}", flush=True)
+    count = 0
     while True:
         conn, addr = sock.accept()
         try:
@@ -26,7 +27,9 @@ def _serve_tls(*, certfile: str, keyfile: str, host: str = "0.0.0.0", port: int 
             continue
         try:
             data = tls.recv(65535)
-            print(f"TLS {addr!r} bytes={len(data)}", flush=True)
+            count += 1
+            if count == 1 or count % 100 == 0:
+                print(f"TLS {addr!r} bytes={len(data)} total={count}", flush=True)
         finally:
             try:
                 tls.unwrap()

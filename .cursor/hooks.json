@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/telegram-session-start.sh",
+        "timeout": 10
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/hooks/telegram-on-stop.sh",
+        "timeout": 30,
+        "loop_limit": 5
+      }
+    ]
+  }
+}

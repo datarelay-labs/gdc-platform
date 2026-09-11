@@ -4,7 +4,12 @@ import type {
   WizardHttpApiAnalysis,
   WizardState,
 } from '../components/streams/wizard/wizard-state'
-import { flattenSampleFields, recordsFromResolvedValue, wizardExtractEvents } from '../components/streams/wizard/wizard-json-extract'
+import {
+  detectEventRootCandidates,
+  flattenSampleFields,
+  recordsFromResolvedValue,
+  wizardExtractEvents,
+} from '../components/streams/wizard/wizard-json-extract'
 import { isRareUnionField, unionSchemaFromExtractedEvents, type UnionSchema } from './unionSchema'
 import { isUnionFieldSensitive } from './unionSchemaFieldDisplay'
 
@@ -98,6 +103,38 @@ export function buildApiTestExtractedEventsPatch(
   }
 }
 
+/** Analysis model for already-parsed record arrays (S3 / remote file sample fetch). */
+export function analysisFromParsedRecordArray(parsedBody: unknown): WizardHttpApiAnalysis | null {
+  if (!Array.isArray(parsedBody)) return null
+  const records = parsedBody.filter(
+    (row): row is Record<string, unknown> => row !== null && typeof row === 'object' && !Array.isArray(row),
+  )
+  const first = records[0] ?? null
+  return {
+    responseSummary: {
+      root_type: 'array',
+      approx_size_bytes: JSON.stringify(parsedBody).length,
+      top_level_keys: [],
+      item_count_root: parsedBody.length,
+      truncation: null,
+    },
+    detectedArrays: [],
+    detectedCheckpointCandidates: [],
+    sampleEvent: first,
+    selectedEventArrayDefault: '$',
+    flatPreviewFields: first ? flattenSampleFields(first) : [],
+    eventRootCandidates: first ? detectEventRootCandidates(first) : [],
+    previewError: null,
+  }
+}
+
+export function parsedRecordEvents(parsedBody: unknown): Array<Record<string, unknown>> {
+  if (!Array.isArray(parsedBody)) return []
+  return parsedBody.filter(
+    (row): row is Record<string, unknown> => row !== null && typeof row === 'object' && !Array.isArray(row),
+  )
+}
+
 export function buildApiTestSuccessPatch(
   parsedJson: unknown,
   analysis: WizardHttpApiAnalysis | null,
@@ -134,7 +171,7 @@ export function summarizeUnionSchemaStatus(
   let sensitiveFieldCount = 0
   for (const field of unionSchema.fields) {
     if (isRareUnionField(field, unionSchema)) rareFieldCount += 1
-    if (isUnionFieldSensitive(field.field_path, field.sample_values, field.field_type)) {
+    if (isUnionFieldSensitive(field)) {
       sensitiveFieldCount += 1
     }
   }

@@ -28,6 +28,8 @@ class DynamicRouteItem(BaseModel):
     name: str
     enabled: bool
     condition_json: dict[str, Any]
+    route_id: int | None = None
+    route_name: str | None = None
     destination_id: int
     destination_name: str | None = None
     created_at: datetime
@@ -44,13 +46,21 @@ class DynamicRouteCreateRequest(BaseModel):
     name: str
     enabled: bool = True
     condition_json: DynamicRouteConditionJson
-    destination_id: int
+    route_id: int | None = None
+    destination_id: int | None = None
+
+    @model_validator(mode="after")
+    def _require_binding(self) -> DynamicRouteCreateRequest:
+        if self.route_id is None and self.destination_id is None:
+            raise ValueError("route_id or destination_id is required")
+        return self
 
 
 class DynamicRoutePatchRequest(BaseModel):
     name: str | None = None
     enabled: bool | None = None
     condition_json: DynamicRouteConditionJson | None = None
+    route_id: int | None = None
     destination_id: int | None = None
 
 

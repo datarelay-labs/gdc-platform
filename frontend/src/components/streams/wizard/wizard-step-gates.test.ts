@@ -5,6 +5,7 @@ import {
   resolveHttpApiTestResult,
   sampleConfirmationPatch,
   wizardApiTestReady,
+  wizardCanRunLiveSampleTest,
   wizardCheckpointConfirmed,
   wizardCheckpointStale,
   wizardCustomExtractionReady,
@@ -185,6 +186,17 @@ describe('wizard-step-gates', () => {
     expect(wizardSampleStepBlockReason(ready)).toMatch(/Sync Position/i)
   })
 
+  it('describes no-record sample fetch without fabricating union schema', () => {
+    const state = buildInitialState()
+    state.apiTest.status = 'success'
+    state.apiTest.ok = false
+    state.apiTest.parsedJson = []
+    state.apiTest.eventCount = 0
+    state.apiTest.s3ConnectivityPassed = true
+    expect(wizardApiTestReady(state)).toBe(false)
+    expect(wizardSampleStepBlockReason(state)).toMatch(/no records/i)
+  })
+
   it('hides incremental-fetch guidance after sample + checkpoint setup is complete', () => {
     expect(wizardIncrementalFetchGuidanceComplete(buildInitialState())).toBe(false)
     expect(wizardIncrementalFetchGuidanceComplete(sampleReadyState())).toBe(true)
@@ -199,6 +211,36 @@ describe('wizard-step-gates', () => {
     const tested = buildInitialState()
     tested.stream.incrementalRequestTestedAt = Date.now()
     expect(wizardIncrementalFetchGuidanceComplete(tested)).toBe(true)
+  })
+
+  it('gates live sample test by source type', () => {
+    const state = buildInitialState()
+    expect(wizardCanRunLiveSampleTest(state)).toBe(false)
+    state.connector.connectorId = 1
+    state.connector.sourceId = 2
+    state.stream.endpoint = ''
+    expect(wizardCanRunLiveSampleTest(state)).toBe(false)
+
+    state.stream.endpoint = '/v1/events'
+    expect(wizardCanRunLiveSampleTest(state)).toBe(true)
+
+    state.connector.sourceType = 'S3_OBJECT_POLLING'
+    state.stream.endpoint = ''
+    expect(wizardCanRunLiveSampleTest(state)).toBe(true)
+
+    state.connector.sourceType = 'REMOTE_FILE_POLLING'
+    state.stream.remoteDirectory = ''
+    expect(wizardCanRunLiveSampleTest(state)).toBe(false)
+    state.stream.remoteDirectory = '/data'
+    expect(wizardCanRunLiveSampleTest(state)).toBe(true)
+
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.sqlQuery = ''
+    state.stream.endpoint = '/v1/events'
+    expect(wizardCanRunLiveSampleTest(state)).toBe(false)
+    state.stream.sqlQuery = 'SELECT id, email FROM users'
+    state.stream.endpoint = ''
+    expect(wizardCanRunLiveSampleTest(state)).toBe(true)
   })
 
   it('allows advanced mode when confirmed paths already extract events', () => {

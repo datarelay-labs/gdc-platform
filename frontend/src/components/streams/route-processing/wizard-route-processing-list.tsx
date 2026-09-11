@@ -3,6 +3,7 @@ import { cn } from '../../../lib/utils'
 import type { DestinationListItem } from '../../../api/gdcDestinations'
 import {
   computeWizardRouteProcessingStatuses,
+  type WizardDataPolicyState,
   type WizardDataProtectionState,
   type WizardRouteDraft,
 } from '../wizard/wizard-state'
@@ -17,12 +18,14 @@ export function WizardRouteProcessingList({
   routeDrafts,
   destinations,
   dataProtection,
+  dataPolicy,
   selectedKey,
   onSelect,
 }: {
   routeDrafts: readonly WizardRouteDraft[]
   destinations: readonly DestinationListItem[]
   dataProtection: WizardDataProtectionState
+  dataPolicy?: Pick<WizardDataPolicyState, 'restrictedResponse' | 'confidentialResponse'>
   selectedKey: string | null
   onSelect: (key: string) => void
 }) {
@@ -53,7 +56,7 @@ export function WizardRouteProcessingList({
             const dest = destById.get(draft.destinationId)
             const hasDestination = routeHasDestination(draft) && Boolean(dest)
             const routeLabel = dest?.name?.trim() || `Destination #${draft.destinationId}`
-            const statuses = computeWizardRouteProcessingStatuses(draft, dataProtection)
+            const statuses = computeWizardRouteProcessingStatuses(draft, dataProtection, dataPolicy)
             const selected = draft.key === selectedKey
 
             return (

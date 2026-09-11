@@ -94,6 +94,8 @@ const KPI_SPARK: Record<DashboardKpiItem['tone'], string> = {
 
 const KPI_ICON: Record<string, typeof Layers> = {
   'active-streams': Layers,
+  'incoming-events': ArrowDownToLine,
+  'outgoing-events': ArrowUpFromLine,
   'ingest-rate': ArrowDownToLine,
   'delivery-rate': ArrowUpFromLine,
   'delivery-gap': TrendingDown,
@@ -311,7 +313,7 @@ export function OverallHealthBeaconCard({
 
   const labelClass = isHealthy ? 'text-emerald-300' : isWarning ? 'text-amber-300' : 'text-red-300'
 
-  const isClickable = beacon.label !== 'OPERATIONAL' && onFocusAlerts != null
+  const isClickable = beacon.posture !== 'healthy' && onFocusAlerts != null
 
   const incidentLabel = fmtTimeAgo(beacon.lastIncidentAt)
 
@@ -364,20 +366,25 @@ const SUMMARY_ITEM_ICON: Record<SystemHealthSummaryItem['id'], typeof Layers> = 
 const SUMMARY_ITEM_HREF: Record<SystemHealthSummaryItem['id'], string> = {
   'no-data': '/streams?filter=no-data',
   'low-volume': '/streams?filter=low-volume',
-  'schema-drift': '/governance',
+  'schema-drift': '/streams?filter=schema-drift',
   'capacity-warning': '/destinations?filter=warning',
   'checkpoint-lag': '/streams?filter=checkpoint-lag',
   'replay-queue': '/governance/replay',
 }
 
 export function SystemHealthSummaryStrip({ items }: { items: SystemHealthSummaryItem[] }) {
+  const cols =
+    items.length <= 4
+      ? 'grid-cols-2 sm:grid-cols-4'
+      : 'grid-cols-3 sm:grid-cols-6'
   return (
     <section
-      aria-label="System health summary"
-      data-testid="dashboard-system-health-summary"
+      aria-label="Operational issues"
+      data-testid="dashboard-operational-issues"
       className={cn(dashboardCardClass, 'flex-1')}
     >
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Operational Issues</p>
+      <div className={cn('grid gap-2', cols)} data-testid="dashboard-system-health-summary">
         {items.map((item) => {
           const Icon = SUMMARY_ITEM_ICON[item.id] ?? AlertTriangle
           const href = SUMMARY_ITEM_HREF[item.id] ?? '/streams'
@@ -519,9 +526,24 @@ function MiniSparkline({ values, color, sparkId }: { values: number[]; color: st
   )
 }
 
-export function DashboardKpiStrip({ items, onFocusAlerts }: { items: DashboardKpiItem[]; onFocusAlerts?: () => void }) {
+export function DashboardKpiStrip({
+  items,
+  onFocusAlerts,
+  columns,
+  testId = 'dashboard-kpi-strip',
+}: {
+  items: DashboardKpiItem[]
+  onFocusAlerts?: () => void
+  /** Override grid columns (default 6). Use 3 for primary traffic strip. */
+  columns?: 3 | 6
+  testId?: string
+}) {
   return (
-    <section aria-label="Dashboard KPI strip" data-testid="dashboard-kpi-strip" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+    <section
+      aria-label="Dashboard KPI strip"
+      data-testid={testId}
+      className={cn('grid gap-3 sm:grid-cols-2', columns === 3 ? 'xl:grid-cols-3' : 'xl:grid-cols-6')}
+    >
       {items.map((kpi) => {
         const Icon = KPI_ICON[kpi.id] ?? Activity
         const { primary, unit } = splitKpiValue(kpi.value)
@@ -671,12 +693,36 @@ function affectedStreamsLabel(issueCount: number, streamCount: number): string {
   return `${n} stream${n === 1 ? '' : 's'} affected`
 }
 
+function groupSchemaDriftStats(group: { rows: Array<{ openSchemaFieldDriftCount?: number }> }): {
+  openDrift: number
+  driftStreams: number
+} {
+  let openDrift = 0
+  let driftStreams = 0
+  for (const row of group.rows) {
+    const n = row.openSchemaFieldDriftCount ?? 0
+    if (n > 0) {
+      openDrift += n
+      driftStreams += 1
+    }
+  }
+  return { openDrift, driftStreams }
+}
+
+function groupDriftCaption(group: { rows: Array<{ openSchemaFieldDriftCount?: number }> }): string | null {
+  const { openDrift, driftStreams } = groupSchemaDriftStats(group)
+  if (openDrift <= 0) return null
+  return `${driftStreams} drift stream${driftStreams === 1 ? '' : 's'} · ${openDrift} open drift`
+}
+
 export function DashboardGroupSummaryPanel({ groupHealth }: { groupHealth: StreamGroupHealthCounts }) {
   const criticalGroups = groupHealth.groups.filter((g) => g.worstStatus === 'ERROR')
   const warningGroups = groupHealth.groups.filter((g) => g.worstStatus === 'DEGRADED')
+  const driftGroups = groupHealth.groups.filter((g) => groupSchemaDriftStats(g).openDrift > 0)
   const hasAny = criticalGroups.length > 0 || warningGroups.length > 0
+  const hasDrift = driftGroups.length > 0
 
-  if (!hasAny) {
+  if (!hasAny && !hasDrift) {
     return (
       <section
         aria-label="Stream group summary"
@@ -711,6 +757,11 @@ export function DashboardGroupSummaryPanel({ groupHealth }: { groupHealth: Strea
                   >
                     <p className="text-[13px] font-semibold text-slate-100">{group.productLabel}</p>
                     <p className="mt-0.5 text-[11px] text-slate-400">{affectedStreamsLabel(group.issueCount, group.rows.length)}</p>
+                    {groupDriftCaption(group) ? (
+                      <p className="mt-0.5 text-[11px] text-amber-300" data-testid={`dashboard-group-drift-${group.productLabel}`}>
+                        {groupDriftCaption(group)}
+                      </p>
+                    ) : null}
                   </Link>
                 </li>
               ))}
@@ -730,6 +781,11 @@ export function DashboardGroupSummaryPanel({ groupHealth }: { groupHealth: Strea
                   >
                     <p className="text-[13px] font-semibold text-slate-100">{group.productLabel}</p>
                     <p className="mt-0.5 text-[11px] text-slate-400">{affectedStreamsLabel(group.issueCount, group.rows.length)}</p>
+                    {groupDriftCaption(group) ? (
+                      <p className="mt-0.5 text-[11px] text-amber-300" data-testid={`dashboard-group-drift-${group.productLabel}`}>
+                        {groupDriftCaption(group)}
+                      </p>
+                    ) : null}
                   </Link>
                 </li>
               ))}
@@ -737,6 +793,25 @@ export function DashboardGroupSummaryPanel({ groupHealth }: { groupHealth: Strea
           </div>
         ) : null}
       </div>
+      {hasDrift ? (
+        <div className="mt-3" data-testid="dashboard-group-summary-schema-drift">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-amber-400">Schema drift</p>
+          <ul className="mt-2 space-y-2">
+            {driftGroups.map((group) => (
+              <li key={`drift-${group.productLabel}`}>
+                <Link
+                  to={streamsExpandedGroupPath(group.productLabel, { filter: 'schema-drift' })}
+                  data-testid={`dashboard-group-summary-schema-drift-${group.productLabel}`}
+                  className="block rounded-lg border border-amber-500/25 bg-amber-500/5 px-2.5 py-2 transition hover:border-amber-500/40"
+                >
+                  <p className="text-[13px] font-semibold text-slate-100">{group.productLabel}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-400">{groupDriftCaption(group)}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -1567,17 +1642,17 @@ export function OperationalProblemsList({
   if (problems.length === 0) {
     return (
       <section
-        aria-label="Operational issues"
-        data-testid="dashboard-operational-issues"
+        aria-label="Issue details"
+        data-testid="dashboard-operational-problem-details"
         className={cn(dashboardCardClass, className)}
       >
         <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-[14px] font-semibold text-slate-900 dark:text-slate-100">Operational Issues</h2>
+          <h2 className="text-[14px] font-semibold text-slate-900 dark:text-slate-100">Issue details</h2>
         </div>
         <div className="mt-4 flex flex-col items-center justify-center gap-1.5 py-4 text-center">
           <CheckCircle2 className="h-5 w-5 text-emerald-500" aria-hidden />
-          <p className="text-[12px] font-semibold text-emerald-400">No operational issues</p>
-          <p className="text-[10px] text-slate-500">All systems running normally.</p>
+          <p className="text-[12px] font-semibold text-emerald-400">No open issues</p>
+          <p className="text-[10px] text-slate-500">Drill-down detail appears here when problems are detected.</p>
         </div>
       </section>
     )
@@ -1585,12 +1660,12 @@ export function OperationalProblemsList({
 
   return (
     <section
-      aria-label="Operational issues"
-      data-testid="dashboard-operational-issues"
+      aria-label="Issue details"
+      data-testid="dashboard-operational-problem-details"
       className={cn(dashboardCardClass, className)}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-[14px] font-semibold text-slate-900 dark:text-slate-100">Operational Issues</h2>
+        <h2 className="text-[14px] font-semibold text-slate-900 dark:text-slate-100">Issue details</h2>
         <Link to={NAV_PATH.streams} className="text-[11px] font-semibold text-violet-400 hover:underline">
           View all →
         </Link>
@@ -1785,6 +1860,13 @@ export function OperationalStatusChips({
   )
 }
 
+const ISSUE_DRILLDOWN_HREF: Record<IssueKey, string> = {
+  'no-data': '/streams?filter=no-data',
+  'low-volume': '/streams?filter=low-volume',
+  'schema-drift': '/streams?filter=schema-drift',
+  'dest-capacity': '/destinations?filter=warning',
+}
+
 /** Operational issue counts surfaced on the main dashboard (existing APIs only). */
 export function OperationalIssuesPanel({
   issues,
@@ -1804,7 +1886,7 @@ export function OperationalIssuesPanel({
   return (
     <section
       aria-label="Operational issues"
-      data-testid="dashboard-operational-issues"
+      data-testid="dashboard-operational-issues-panel"
       className={cn(dashboardCardClass, className)}
     >
       <div className="flex items-baseline justify-between gap-2">
@@ -1821,7 +1903,11 @@ export function OperationalIssuesPanel({
           const style = ISSUE_ROW_STYLES[row.key]
           return (
             <li key={row.testId}>
-              <Link to={NAV_PATH.streams} data-testid={row.testId} className="block rounded-lg border border-transparent p-1 transition hover:border-violet-500/30">
+              <Link
+                to={ISSUE_DRILLDOWN_HREF[row.key]}
+                data-testid={row.testId}
+                className="block rounded-lg border border-transparent p-1 transition hover:border-violet-500/30"
+              >
                 <div className="flex items-center justify-between gap-2 text-[12px]">
                   <span className={cn('font-medium', hot ? 'text-slate-900 dark:text-slate-100' : 'text-slate-600 dark:text-gdc-muted')}>{row.label}</span>
                   <span className={cn('text-lg font-bold tabular-nums', hot ? style.count : 'text-slate-500')}>{formatMetricCount(n)}</span>

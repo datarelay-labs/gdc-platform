@@ -67,6 +67,29 @@ describe('StepDataProtection', () => {
       detectedCheckpointCandidates: [],
       previewError: null,
     }
+    state.apiTest.extractedEvents = [{ user: { email: 'a@b.c' }, count: 1 }]
+    state.apiTest.unionSchema = {
+      total_events: 1,
+      sensitive_suggestions_applied: true,
+      fields: [
+        {
+          field_path: '$.user.email',
+          field_type: 'string',
+          occurrence_count: 1,
+          sample_values: ['a@b.c'],
+          suggested_sensitive_type: 'Likely Email',
+          sensitivity_class: 'pii',
+          detection_source: 'sensitive_detection_engine',
+          detection_method: 'field_name',
+        },
+        {
+          field_path: '$.count',
+          field_type: 'integer',
+          occurrence_count: 1,
+          sample_values: [1],
+        },
+      ],
+    }
 
     render(<StepDataProtection state={state} onChange={vi.fn()} />)
     expect(screen.getByTestId('data-protection-suggestions')).toBeInTheDocument()

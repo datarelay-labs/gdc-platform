@@ -10,7 +10,7 @@ from app.database import Base, utcnow
 
 
 class StreamDynamicRoute(Base):
-    """Policy-conditioned additive destination fan-out for a Stream."""
+    """Conditioned selection of an existing Stream Route (not a destination send)."""
 
     __tablename__ = "stream_dynamic_routes"
 
@@ -24,6 +24,12 @@ class StreamDynamicRoute(Base):
     name: Mapped[str] = mapped_column(String(128), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     condition_json: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    route_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("routes.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
     destination_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("destinations.id", ondelete="RESTRICT"),

@@ -6,6 +6,8 @@ import {
   resolveWizardProtectionIntents,
 } from './wizard-data-protection-persist'
 import { buildInitialState } from './wizard-state'
+import { buildUnionSchema } from '../../../utils/unionSchema'
+import { attachSensitiveSuggestions } from '../../../utils/unionSchemaSensitiveSuggestions'
 
 vi.mock('../../../api/gdcPolicy', () => ({
   createPolicyRule: vi.fn(async () => ({ rule: { id: 1 } })),
@@ -98,6 +100,32 @@ describe('wizard-data-protection-persist', () => {
       },
     ]
     state.apiTest.extractedEvents = [{ user: { email: 'a@b.c' }, token: 'secret' }]
+    state.apiTest.unionSchema = {
+      total_events: 1,
+      sensitive_suggestions_applied: true,
+      fields: [
+        {
+          field_path: '$.email',
+          field_type: 'string',
+          occurrence_count: 1,
+          sample_values: ['a@b.c'],
+          suggested_sensitive_type: 'Likely Email',
+          sensitivity_class: 'pii',
+          detection_source: 'sensitive_detection_engine',
+          detection_method: 'field_name',
+        },
+        {
+          field_path: '$.token',
+          field_type: 'string',
+          occurrence_count: 1,
+          sample_values: ['secret'],
+          suggested_sensitive_type: 'Likely Token',
+          sensitivity_class: 'secret',
+          detection_source: 'sensitive_detection_engine',
+          detection_method: 'field_name',
+        },
+      ],
+    }
     state.mapping = [
       { id: 'm1', outputField: 'email', sourceJsonPath: '$.user.email' },
       { id: 'm2', outputField: 'token', sourceJsonPath: '$.token' },
@@ -141,6 +169,22 @@ describe('wizard-data-protection-persist', () => {
 
   it('maps block delivery to quarantine policy action', async () => {
     const state = buildInitialState()
+    state.apiTest.unionSchema = {
+      total_events: 1,
+      sensitive_suggestions_applied: true,
+      fields: [
+        {
+          field_path: '$.secret',
+          field_type: 'string',
+          occurrence_count: 1,
+          sample_values: ['x'],
+          suggested_sensitive_type: 'Likely Secret',
+          sensitivity_class: 'secret',
+          detection_source: 'sensitive_detection_engine',
+          detection_method: 'field_name',
+        },
+      ],
+    }
     state.dataProtection.intents = [
       {
         key: 'a',
@@ -157,6 +201,36 @@ describe('wizard-data-protection-persist', () => {
         condition_json: { sensitivity_class: 'secret' },
       }),
     )
+  })
+
+  it('does not persist class-scoped rules for backend non-sensitive fields', async () => {
+    const state = buildInitialState()
+    state.apiTest.extractedEvents = [{ status: 'ok', email: 'a@b.c' }]
+    state.apiTest.unionSchema = attachSensitiveSuggestions(buildUnionSchema(state.apiTest.extractedEvents), [
+      {
+        field_path: '$.email',
+        suggested_sensitive_type: 'Likely Email',
+        sensitivity_class: 'pii',
+        detection_method: 'field_name',
+        detection_source: 'sensitive_detection_engine',
+      },
+    ])
+    state.dataProtection.intents = [
+      {
+        key: 'a',
+        detectedField: '$.status',
+        protectionAction: 'mask_partial',
+        deliveryBehavior: 'quarantine',
+      },
+    ]
+
+    const preview = buildDataProtectionPersistPreview(state.dataProtection, state.apiTest.unionSchema)
+    expect(preview.aggregated).toEqual([])
+    const result = await persistWizardDataProtectionIntents(9, state)
+    expect(result.saved).toBe(true)
+    expect(createPolicyRule).not.toHaveBeenCalled()
+    expect(createClassificationRule).not.toHaveBeenCalled()
+    expect(createProtectionRulesDirect).not.toHaveBeenCalled()
   })
 
   it('skips persist when no intents configured', async () => {

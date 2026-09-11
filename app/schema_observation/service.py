@@ -140,6 +140,18 @@ def observe_extracted_events(
     _finalize_observation_row(db, stream_id=stream_id, row=row, merged_paths=merged_paths, batch_paths=batch_paths)
 
 
+def _load_stream_union_schema(db: Session, stream_id: int) -> Any | None:
+    from app.streams.models import Stream
+
+    stream = db.get(Stream, stream_id)
+    if stream is None:
+        return None
+    config = stream.config_json if isinstance(stream.config_json, dict) else None
+    if not isinstance(config, dict):
+        return None
+    return config.get("union_schema")
+
+
 def _finalize_observation_row(
     db: Session,
     *,
@@ -152,9 +164,18 @@ def _finalize_observation_row(
         return
 
     update_path_presence_streaks(merged_paths, batch_paths)
-    maybe_establish_baseline(row, merged_paths)
+    union_schema = _load_stream_union_schema(db, stream_id) if row.baseline_paths_json is None else None
+    established = maybe_establish_baseline(row, merged_paths, union_schema=union_schema)
     baseline_raw = row.baseline_paths_json if isinstance(row.baseline_paths_json, dict) else {}
     baseline_paths = baseline_raw.get("paths") if isinstance(baseline_raw.get("paths"), dict) else {}
+    if established and baseline_paths:
+        # Same-run Union Schema baseline: treat non-baseline batch paths as first Observed only.
+        for path, entry in merged_paths.items():
+            if path in baseline_paths:
+                continue
+            entry["add_confirm_runs"] = 1 if path in batch_paths else 0
+            entry["type_change_confirm_runs"] = 0
+            entry.pop("type_change_last_batch_type", None)
     ensure_pending_add_tracking(merged_paths, baseline_paths, batch_paths)
     update_type_change_streaks(merged_paths, baseline_paths, batch_paths)
     row.paths_json = _serialize_paths(merged_paths)

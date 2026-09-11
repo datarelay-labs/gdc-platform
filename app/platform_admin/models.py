@@ -146,8 +146,8 @@ class PlatformConfigVersion(Base):
 class PlatformAlertSettings(Base):
     """Alert rule toggles, channel endpoints, and cooldown configuration.
 
-    Webhook delivery is implemented (see ``app.platform_admin.alert_service``); Slack/email
-    channels remain planned placeholders and are persisted only.
+    Webhook delivery is implemented (see ``app.platform_admin.alert_service``). Email uses the
+    platform SMTP sender when ``SMTP_ENABLED`` is configured. Slack remains a planned placeholder.
     """
 
     __tablename__ = "platform_alert_settings"

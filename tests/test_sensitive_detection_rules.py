@@ -95,6 +95,8 @@ def test_pattern_email_on_email_leaf() -> None:
         ("$.password", "secret"),
         ("$.roles", "security_metadata"),
         ("$.email_verified", "pii"),
+        ("$.credit_card", "pii"),
+        ("$.card_number", "pii"),
     ],
 )
 def test_field_name_classes(path: str, expected_class: str) -> None:

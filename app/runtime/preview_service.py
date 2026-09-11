@@ -123,6 +123,9 @@ from app.runtime.schemas import (
     TransformPreviewRequest,
     TransformPreviewResponse,
     TransformPreviewSampleSummary,
+    SensitiveDetectionPreviewRequest,
+    SensitiveDetectionPreviewResponse,
+    SensitiveSuggestionEntry,
 )
 
 
@@ -1486,6 +1489,71 @@ def run_http_api_test(payload: HttpApiTestRequest, db: Session | None = None, *,
             remote_file_event_count=len(events),
         )
 
+    if _is_s3_connector_auth_config(source_config):
+        from app.sources.adapters.s3_object_polling import S3ObjectPollingAdapter
+
+        sc = dict(stream_config)
+        try:
+            max_objects = int(sc.get("max_objects_per_run") or 5)
+        except (TypeError, ValueError):
+            max_objects = 5
+        sc["max_objects_per_run"] = max(1, min(max_objects, 10))
+        started = time.perf_counter()
+        try:
+            events = S3ObjectPollingAdapter().fetch(dict(source_config), sc, payload.checkpoint)
+        except SourceFetchError as exc:
+            raise PreviewRequestError(
+                400,
+                {
+                    "ok": False,
+                    "error_type": "s3_sample_fetch_failed",
+                    "message": str(exc),
+                    "error_code": "s3_sample_fetch_failed",
+                },
+            ) from exc
+        if not isinstance(events, list):
+            events = []
+        latency_ms = int((time.perf_counter() - started) * 1000)
+        bucket = str(source_config.get("bucket") or "")
+        prefix = str(source_config.get("prefix") or "").strip("/")
+        meta_url = f"s3://{bucket}/{prefix}".rstrip("/") if bucket else str(source_config.get("endpoint_url") or "s3")
+        cap = events[:100]
+        raw_out = json.dumps(cap, default=str, ensure_ascii=False)
+        if len(raw_out) > 150_000:
+            raw_out = raw_out[:150_000] + "\n...truncated..."
+        sample_keys: list[str] = []
+        seen_keys: set[str] = set()
+        for ev in cap:
+            if not isinstance(ev, dict):
+                continue
+            key = str(ev.get("s3_key") or "").strip()
+            if key and key not in seen_keys:
+                seen_keys.add(key)
+                sample_keys.append(key)
+        return HttpApiTestResponse(
+            ok=True,
+            request=HttpApiTestRequestMeta(method="S3_OBJECT_POLLING", url=meta_url, headers_masked={}),
+            actual_request_sent=HttpApiTestActualRequestMeta(
+                method="S3_OBJECT_POLLING",
+                url=meta_url,
+                endpoint=None,
+                query_params={},
+                headers_masked={},
+                json_body_masked=None,
+                timeout_seconds=30.0,
+            ),
+            response=HttpApiTestResponseMeta(
+                status_code=200,
+                latency_ms=latency_ms,
+                headers={},
+                raw_body=raw_out,
+                parsed_json=cap,
+                content_type="application/json",
+            ),
+            s3_event_count=len(events),
+            s3_sample_keys=sample_keys,
+        )
+
     endpoint = str(_lookup(stream_config, ["endpoint"], "")).strip()
     method = str(_lookup(stream_config, ["method"], "GET")).upper()
     if not endpoint:
@@ -2840,4 +2908,21 @@ def run_route_delivery_preview(
         message_count=len(preview_messages),
         resolved_formatter_config=resolved_out,
         preview_messages=preview_messages,
+    )
+
+
+def run_sensitive_detection_preview(
+    payload: SensitiveDetectionPreviewRequest,
+) -> SensitiveDetectionPreviewResponse:
+    """Suggestion-only preview using the existing Sensitive Detection Engine."""
+
+    from app.sensitive_detection.suggestions import suggest_sensitive_fields_for_events
+
+    events = [event for event in payload.events if isinstance(event, dict)]
+    raw = suggest_sensitive_fields_for_events(events)
+    suggestions = [SensitiveSuggestionEntry.model_validate(item) for item in raw]
+    return SensitiveDetectionPreviewResponse(
+        suggestions=suggestions,
+        suggestion_count=len(suggestions),
+        auto_protection_applied=False,
     )

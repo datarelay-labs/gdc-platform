@@ -249,7 +249,7 @@
   },
   {
     "rule_id": "R019d_BROWSER_TRANSFORM_UI",
-    "description": "Browser Transform UI supports stream-level transforms; per-route transform override is API-only (wizard deploy intent_only)",
+    "description": "Browser Transform UI supports stream-level transforms and per-route Transform Override persist (route_transform)",
     "capability_ids": [
       "processing.mapping.field_jsonpath",
       "processing.enrichment.jsonata",
@@ -259,8 +259,8 @@
     ],
     "evidence": [
       "frontend/src/components/streams/wizard/step-mapping-combined.tsx",
-      "frontend/src/components/streams/wizard/wizard-deploy-projection.ts intent_only transform",
-      "frontend/src/components/routes/route-edit-transform-panel.tsx"
+      "frontend/src/components/streams/wizard/wizard-transform-persist.ts",
+      "frontend/src/components/streams/wizard/wizard-deploy-projection.ts persistKind route_transform"
     ]
   },
   {
@@ -280,7 +280,7 @@
   },
   {
     "rule_id": "R019f_BROWSER_ROUTE_OVERRIDE_UI",
-    "description": "Browser Route Override UI: inherit/dest-mix/protection/delivery allowed; policy override and failover are API-only",
+    "description": "Browser Route Override UI: inherit/dest-mix/transform/protection/policy/delivery/failover allowed",
     "capability_ids": [
       "routes.architecture.one_stream_many_routes",
       "routes.per_route_protection_classification_policy",
@@ -289,8 +289,10 @@
     ],
     "evidence": [
       "frontend/src/components/streams/wizard/wizard-stream-hydrate.ts",
-      "frontend/src/components/streams/wizard/wizard-deploy-projection.ts",
-      "frontend/src/components/routes/route-edit-page.tsx PolicyPanel"
+      "frontend/src/components/streams/wizard/wizard-deploy-projection.ts persistKind governance for policy",
+      "frontend/src/components/streams/wizard/wizard-policy-persist.ts",
+      "frontend/src/components/streams/route-processing/wizard-route-processing-detail-panel.tsx route-failover-configuration",
+      "frontend/src/components/streams/wizard/wizard-failover-persist.ts"
     ]
   },
   {

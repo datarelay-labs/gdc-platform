@@ -428,6 +428,20 @@ def load_checkpoints_by_stream(db: Session) -> dict[int, Checkpoint]:
     return {int(cp.stream_id): cp for cp in rows}
 
 
+def load_open_schema_field_drift_counts(db: Session) -> dict[int, int]:
+    """Count confirmed open StreamSchemaFieldDrift rows per stream (single GROUP BY)."""
+
+    from app.schema_observation.models import DRIFT_STATUS_OPEN, StreamSchemaFieldDrift
+
+    rows = (
+        db.query(StreamSchemaFieldDrift.stream_id, func.count(StreamSchemaFieldDrift.id))
+        .filter(StreamSchemaFieldDrift.status == DRIFT_STATUS_OPEN)
+        .group_by(StreamSchemaFieldDrift.stream_id)
+        .all()
+    )
+    return {int(sid): int(cnt) for sid, cnt in rows}
+
+
 def count_routes_per_stream(db: Session) -> dict[int, int]:
     rows = (
         db.query(Route.stream_id, func.count(Route.id))

@@ -31,6 +31,7 @@ from app.replay.metrics import (
 from app.replay.models import (
     REPLAY_STATUS_DISCARDED,
     REPLAY_STATUS_FAILED,
+    REPLAY_STATUS_IN_PROGRESS,
     REPLAY_STATUS_PENDING,
     REPLAY_STATUS_REPLAYED,
     REPLAY_TERMINAL_STATUSES,
@@ -39,7 +40,8 @@ from app.replay.models import (
 
 logger = logging.getLogger(__name__)
 
-_REPLAYABLE_STATUSES = frozenset({REPLAY_STATUS_PENDING, REPLAY_STATUS_FAILED})
+_REPLAYABLE_STATUSES = frozenset({REPLAY_STATUS_PENDING, REPLAY_STATUS_FAILED, REPLAY_STATUS_IN_PROGRESS})
+_IN_PROGRESS_STALE_SECONDS = 15 * 60
 _LOCK_NOT_AVAILABLE_MARKERS = ("could not obtain lock", "lock_not_available", "55p03")
 REPLAY_DESTINATION_RATE_LIMITED = "REPLAY_DESTINATION_RATE_LIMITED"
 
@@ -213,6 +215,8 @@ def discard_replay_event(db: Session, event_id: int) -> dict[str, Any]:
     row = _lock_replay_event_row(db, event_id)
     if row is None:
         raise ReplayEventNotFoundError(event_id)
+    if row.status == REPLAY_STATUS_IN_PROGRESS:
+        raise ReplayInProgressError(event_id)
     if row.status in REPLAY_TERMINAL_STATUSES:
         raise ReplayEventStateError(
             "REPLAY_INVALID_STATE",
@@ -264,7 +268,14 @@ def execute_replay_event(
     destination_registry: DestinationAdapterRegistry | None = None,
     destination_limiter: DestinationRateLimiter | None = None,
 ) -> dict[str, Any]:
-    """Resend stored protected payload; never updates checkpoints."""
+    """Resend stored protected payload; never updates checkpoints.
+
+    DB boundary: claim + materialize under the caller transaction, commit the claim,
+    perform destination network I/O with no open caller transaction, then persist the
+    outcome in a short write session.
+    """
+
+    from app.runners.stream_runner_db import run_with_db
 
     row = _lock_replay_event_row(db, event_id)
     if row is None:
@@ -279,6 +290,14 @@ def execute_replay_event(
             "REPLAY_ALREADY_REPLAYED",
             "replayed events cannot be replayed again",
         )
+    now = datetime.now(timezone.utc)
+    if row.status == REPLAY_STATUS_IN_PROGRESS:
+        updated = row.updated_at or now
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        age_s = (now - updated).total_seconds()
+        if age_s < _IN_PROGRESS_STALE_SECONDS:
+            raise ReplayInProgressError(event_id)
     if row.status not in _REPLAYABLE_STATUSES:
         raise ReplayEventStateError(
             "REPLAY_INVALID_STATE",
@@ -290,8 +309,13 @@ def execute_replay_event(
         raise ReplayEventStateError("REPLAY_PAYLOAD_EMPTY", "stored protected payload is empty")
 
     before_hash = _payload_hash(events)
+    stream_id = int(row.stream_id)
+    destination_id = int(row.destination_id)
+    route_id = int(row.route_id) if row.route_id is not None else None
+    prior_retry_count = int(row.retry_count or 0)
+    protected_payload_snapshot = deepcopy(row.protected_payload_json) if isinstance(row.protected_payload_json, dict) else {}
 
-    destination = get_destination_by_id(db, int(row.destination_id))
+    destination = get_destination_by_id(db, destination_id)
     if destination is None:
         raise ReplayEventStateError("REPLAY_DESTINATION_NOT_FOUND", "destination not found")
     if not bool(destination.enabled):
@@ -322,16 +346,15 @@ def execute_replay_event(
     limiter = destination_limiter or get_process_destination_rate_limiter()
     limiter_key, effective_rl = _effective_replay_rate_limit_json(db, row, destination)
     if not limiter.allow(limiter_key, effective_rl):
-        now = datetime.now(timezone.utc)
         persist_replay_observability_log(
             db,
             stage=REPLAY_EVENT_REPLAY_FAILED_STAGE,
-            stream_id=int(row.stream_id),
-            destination_id=int(row.destination_id),
+            stream_id=stream_id,
+            destination_id=destination_id,
             replay_event_id=int(row.id),
             status=row.status,
-            retry_count=int(row.retry_count or 0),
-            route_id=row.route_id,
+            retry_count=prior_retry_count,
+            route_id=route_id,
             message="destination rate limited",
             level="WARN",
             log_status="RATE_LIMITED",
@@ -343,8 +366,13 @@ def execute_replay_event(
             "destination rate limited",
         )
 
+    # Claim before network I/O so concurrent workers see in_progress after commit.
+    row.status = REPLAY_STATUS_IN_PROGRESS
+    row.updated_at = now
+    db.commit()
+
     send_started = time.monotonic()
-    now = datetime.now(timezone.utc)
+    send_error: Exception | None = None
     try:
         registry.get(destination_type).send(
             events,
@@ -353,68 +381,90 @@ def execute_replay_event(
             prefix_context=prefix_context,
         )
     except Exception as exc:
-        latency_ms = max(0, int((time.monotonic() - send_started) * 1000))
-        row.status = REPLAY_STATUS_FAILED
-        row.retry_count = int(row.retry_count or 0) + 1
-        row.updated_at = now
-        row.last_replay_at = now
-        row.error_type = type(exc).__name__
-        row.error_message = str(exc)[:2000]
+        send_error = exc
+
+    latency_ms = max(0, int((time.monotonic() - send_started) * 1000))
+    finish_now = datetime.now(timezone.utc)
+
+    def _persist_outcome(write_db: Session) -> dict[str, Any]:
+        locked = _lock_replay_event_row(write_db, event_id)
+        if locked is None:
+            raise ReplayEventNotFoundError(event_id)
+        if send_error is not None:
+            locked.status = REPLAY_STATUS_FAILED
+            locked.retry_count = prior_retry_count + 1
+            locked.updated_at = finish_now
+            locked.last_replay_at = finish_now
+            locked.error_type = type(send_error).__name__
+            locked.error_message = str(send_error)[:2000]
+            persist_replay_observability_log(
+                write_db,
+                stage=REPLAY_EVENT_REPLAY_FAILED_STAGE,
+                stream_id=stream_id,
+                destination_id=destination_id,
+                replay_event_id=int(locked.id),
+                status=locked.status,
+                retry_count=int(locked.retry_count),
+                route_id=route_id,
+                message=str(send_error)[:500],
+                level="ERROR",
+                log_status="FAILED",
+                error_code=type(send_error).__name__,
+                extra={"latency_ms": latency_ms, "event_count": len(events)},
+            )
+            write_db.flush()
+            return {
+                **replay_event_to_dict(locked),
+                "outcome": "failed",
+                "message": str(send_error),
+                "payload_hash": before_hash,
+            }
+
+        after_events = _extract_stored_events(locked)
+        # Prefer the pre-send snapshot if the row payload was somehow mutated.
+        if not after_events and protected_payload_snapshot:
+            raw_events = protected_payload_snapshot.get("events")
+            if isinstance(raw_events, list):
+                after_events = [deepcopy(item) for item in raw_events if isinstance(item, dict)]
+        after_hash = _payload_hash(after_events)
+        if after_hash != before_hash:
+            logger.warning(
+                "replay_payload_hash_mismatch replay_event_id=%s before=%s after=%s",
+                locked.id,
+                before_hash[:16],
+                after_hash[:16],
+            )
+
+        locked.status = REPLAY_STATUS_REPLAYED
+        locked.retry_count = prior_retry_count + 1
+        locked.updated_at = finish_now
+        locked.last_replay_at = finish_now
+        locked.error_type = None
+        locked.error_message = None
         persist_replay_observability_log(
-            db,
-            stage=REPLAY_EVENT_REPLAY_FAILED_STAGE,
-            stream_id=int(row.stream_id),
-            destination_id=int(row.destination_id),
-            replay_event_id=int(row.id),
-            status=row.status,
-            retry_count=int(row.retry_count),
-            route_id=row.route_id,
-            message=str(exc)[:500],
-            level="ERROR",
-            log_status="FAILED",
-            error_code=type(exc).__name__,
-            extra={"latency_ms": latency_ms, "event_count": len(events)},
+            write_db,
+            stage=REPLAY_EVENT_REPLAYED_STAGE,
+            stream_id=stream_id,
+            destination_id=destination_id,
+            replay_event_id=int(locked.id),
+            status=locked.status,
+            retry_count=int(locked.retry_count),
+            route_id=route_id,
+            message="replay delivered successfully",
+            extra={"latency_ms": latency_ms, "event_count": len(events), "payload_hash": before_hash},
         )
-        db.flush()
+        write_db.flush()
         return {
-            **replay_event_to_dict(row),
-            "outcome": "failed",
-            "message": str(exc),
+            **replay_event_to_dict(locked),
+            "outcome": "replayed",
+            "message": "Replay delivered successfully (checkpoint unchanged).",
             "payload_hash": before_hash,
         }
 
-    after_hash = _payload_hash(_extract_stored_events(row))
-    if after_hash != before_hash:
-        logger.warning(
-            "replay_payload_hash_mismatch replay_event_id=%s before=%s after=%s",
-            row.id,
-            before_hash[:16],
-            after_hash[:16],
-        )
-
-    latency_ms = max(0, int((time.monotonic() - send_started) * 1000))
-    row.status = REPLAY_STATUS_REPLAYED
-    row.retry_count = int(row.retry_count or 0) + 1
-    row.updated_at = now
-    row.last_replay_at = now
-    row.error_type = None
-    row.error_message = None
-    persist_replay_observability_log(
-        db,
-        stage=REPLAY_EVENT_REPLAYED_STAGE,
-        stream_id=int(row.stream_id),
-        destination_id=int(row.destination_id),
-        replay_event_id=int(row.id),
-        status=row.status,
-        retry_count=int(row.retry_count),
-        route_id=row.route_id,
-        message="replay delivered successfully",
-        extra={"latency_ms": latency_ms, "event_count": len(events), "payload_hash": before_hash},
-    )
-    db.flush()
-    return {
-        **replay_event_to_dict(row),
-        "outcome": "replayed",
-        "message": "Replay delivered successfully (checkpoint unchanged).",
-        "payload_hash": before_hash,
-    }
+    result = run_with_db(_persist_outcome, commit=True)
+    # Refresh caller session view without closing it (tests may inspect the same Session).
+    try:
+        db.expire_all()
+    except Exception:
+        pass
+    return result

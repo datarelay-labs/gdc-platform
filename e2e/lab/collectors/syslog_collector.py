@@ -30,6 +30,7 @@ from urllib.parse import parse_qs, urlparse
 LOCK = threading.Lock()
 MESSAGES: list[dict[str, Any]] = []
 MAX_MESSAGES = 5000
+NEXT_ID = 0
 TLS_LISTENER_READY = False
 TLS_LISTENER_ERROR: str | None = None
 
@@ -94,11 +95,24 @@ def _store(
         "tls_client_subject": tls_client_subject,
     }
     with LOCK:
-        MESSAGES.append(entry)
-        if len(MESSAGES) > MAX_MESSAGES:
-            del MESSAGES[: len(MESSAGES) - MAX_MESSAGES]
-        entry["id"] = len(MESSAGES)
+        append_message(entry)
     print(f"[syslog-collector] {protocol} from {remote} bytes={len(raw)} cid={entry['correlation_id']}", flush=True)
+
+
+def append_message(entry: dict[str, Any]) -> dict[str, Any]:
+    """Assign a never-reused id, then cap the in-memory ring buffer.
+
+    Callers must hold LOCK. Reusing id=len(MESSAGES) after wrap made every new
+    row look like the baseline in waitForNew collector correlation.
+    """
+    global NEXT_ID
+    NEXT_ID += 1
+    entry["id"] = NEXT_ID
+    MESSAGES.append(entry)
+    overflow = len(MESSAGES) - MAX_MESSAGES
+    if overflow > 0:
+        del MESSAGES[:overflow]
+    return entry
 
 
 def _serve_udp(port: int) -> None:

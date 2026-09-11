@@ -14,6 +14,20 @@ vi.mock('../../../api/gdcDestinations', () => ({
       config_json: { host: '10.0.0.1', port: 514 },
       last_connectivity_test_success: true,
     },
+    {
+      id: 20,
+      name: 'SIEM Archive',
+      destination_type: 'SYSLOG_TCP',
+      config_json: { host: '10.0.0.2', port: 514 },
+      last_connectivity_test_success: true,
+    },
+    {
+      id: 30,
+      name: 'Webhook Notify',
+      destination_type: 'WEBHOOK',
+      config_json: { url: 'https://example.invalid/hook' },
+      last_connectivity_test_success: true,
+    },
   ]),
 }))
 
@@ -98,9 +112,18 @@ describe('StepRouteProcessing', () => {
     expect(screen.getByTestId('schema-drift-policy-section')).toBeInTheDocument()
     expect(screen.getByTestId('protection-rules-section')).toBeInTheDocument()
     expect(screen.queryByTestId('route-processing-shared-transform')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('shared-processing-tab-classification'))
+    expect(screen.getByTestId('shared-classification-editor')).toBeInTheDocument()
+    expect(screen.getByTestId('shared-classification-default-level')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('shared-processing-tab-policy'))
+    expect(screen.getByTestId('shared-policy-editor')).toBeInTheDocument()
+    expect(screen.getByTestId('shared-policy-restricted-response')).toBeInTheDocument()
+    expect(screen.getByTestId('shared-policy-confidential-response')).toBeInTheDocument()
   })
 
-  it('shows unified data protection tab in route override mode', async () => {
+  it('shows first-class classification and policy tabs in route override mode', async () => {
     const state = readyState()
     state.destinations.routeDrafts[0] = {
       ...state.destinations.routeDrafts[0]!,
@@ -122,14 +145,28 @@ describe('StepRouteProcessing', () => {
       </MemoryRouter>,
     )
 
+    expect(screen.getByTestId('route-detail-tab-transform')).toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-data_protection')).toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-classification')).toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-policy')).toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-delivery')).toBeInTheDocument()
+
     fireEvent.click(screen.getByTestId('route-detail-tab-data_protection'))
     expect(screen.getByTestId('route-detail-data-protection')).toBeInTheDocument()
     expect(screen.getByTestId('schema-drift-policy-section')).toBeInTheDocument()
     expect(screen.getByTestId('protection-rules-section')).toBeInTheDocument()
-    expect(screen.getByTestId('route-default-delivery-behavior-section')).toBeInTheDocument()
-    expect(screen.queryByTestId('route-detail-tab-protection')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('route-detail-tab-classification')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('route-detail-tab-policy')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('route-default-delivery-behavior-section')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('route-detail-tab-classification'))
+    expect(screen.getByTestId('route-detail-classification')).toBeInTheDocument()
+    expect(screen.getByTestId('route-classification-floor')).toBeInTheDocument()
+    expect(screen.getByTestId('route-classification-rules')).toBeInTheDocument()
+    expect(screen.getByTestId('route-classification-rule-add')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('route-detail-tab-policy'))
+    expect(screen.getByTestId('route-detail-policy')).toBeInTheDocument()
+    expect(screen.getByTestId('route-policy-override-section')).toBeInTheDocument()
+    expect(screen.getByTestId('route-policy-delivery-behavior')).toBeInTheDocument()
   })
 
   it('shows processing concern statuses and delivery on route card', async () => {
@@ -189,7 +226,7 @@ describe('StepRouteProcessing', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows route mode selector and hides override tabs when using shared processing', async () => {
+  it('shows all five route stages when using shared processing', async () => {
     render(
       <MemoryRouter>
         <StepRouteProcessing
@@ -208,9 +245,13 @@ describe('StepRouteProcessing', () => {
     expect(screen.getByTestId('route-processing-mode')).toBeInTheDocument()
     expect(screen.getByTestId('route-processing-mode-shared')).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('route-shared-mode-summary')).toHaveTextContent(ROUTE_PROCESSING_COPY.routeUsesShared)
-    expect(screen.queryByTestId('route-detail-tab-transform')).not.toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-transform')).toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-data_protection')).toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-classification')).toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-tab-policy')).toBeInTheDocument()
     expect(screen.getByTestId('route-detail-tab-delivery')).toBeInTheDocument()
-    expect(screen.queryByTestId('route-detail-transform')).not.toBeInTheDocument()
+    expect(screen.getByTestId('route-detail-transform')).toBeInTheDocument()
+    expect(screen.getByTestId('route-inherit-transform')).toBeInTheDocument()
   })
 
   it('shows override editors when override mode is selected', async () => {
@@ -289,6 +330,52 @@ describe('StepRouteProcessing', () => {
     expect(await screen.findByTestId('route-processing-failure-policy-r1')).toBeInTheDocument()
     expect(screen.getByTestId('route-processing-eps-r1')).toBeInTheDocument()
     expect(screen.getByTestId('route-processing-burst-r1')).toBeInTheDocument()
+    expect(screen.getByTestId('route-failover-configuration')).toBeInTheDocument()
+    expect(screen.getByTestId('route-failover-enabled')).toBeInTheDocument()
+    expect(screen.getByTestId('route-failover-primary')).toHaveTextContent('Syslog Primary')
+    expect(screen.getByTestId('route-failover-standby')).toBeInTheDocument()
+  })
+
+  it('lets the operator enable failover and choose a standby destination', async () => {
+    const onChangeDestinations = vi.fn()
+    const state = readyState()
+    state.destinations.routeDrafts[0] = {
+      ...state.destinations.routeDrafts[0]!,
+      failover: { enabled: true, secondaryDestinationId: null },
+    }
+    render(
+      <MemoryRouter>
+        <StepRouteProcessing
+          state={state}
+          onChangeMapping={() => {}}
+          onChangeMappingMode={() => {}}
+          onChangeFullEventJsonata={() => {}}
+          onChangeFullEventRegexConfigJson={() => {}}
+          onChangeEnrichment={() => {}}
+          onChangeDataProtection={() => {}}
+          onChangeDestinations={onChangeDestinations}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByTestId('route-detail-tab-delivery'))
+    const enabled = await screen.findByTestId('route-failover-enabled')
+    expect(enabled).toBeChecked()
+    const standby = screen.getByTestId('route-failover-standby')
+    await waitFor(() => {
+      expect(standby).not.toBeDisabled()
+      expect(within(standby).getByRole('option', { name: 'SIEM Archive' })).toBeInTheDocument()
+    })
+    fireEvent.change(standby, { target: { value: '20' } })
+    expect(onChangeDestinations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        routeDrafts: [
+          expect.objectContaining({
+            failover: expect.objectContaining({ enabled: true, secondaryDestinationId: 20 }),
+          }),
+        ],
+      }),
+    )
   })
 
   it('shows protection override status when route has field overrides', () => {
@@ -344,5 +431,163 @@ describe('StepRouteProcessing', () => {
 
     expect(screen.getByTestId('route-processing-empty')).toHaveTextContent(ROUTE_PROCESSING_COPY.noRoutes)
     expect(screen.getByTestId('route-processing-empty')).toHaveTextContent(ROUTE_PROCESSING_COPY.noRoutesHint)
+  })
+
+  it('exposes shared transform, protection, classification, and policy cards', async () => {
+    render(
+      <MemoryRouter>
+        <StepRouteProcessing
+          state={readyState()}
+          onChangeMapping={() => {}}
+          onChangeMappingMode={() => {}}
+          onChangeFullEventJsonata={() => {}}
+          onChangeFullEventRegexConfigJson={() => {}}
+          onChangeEnrichment={() => {}}
+          onChangeDataProtection={() => {}}
+          onChangeDestinations={() => {}}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(screen.getByTestId('shared-processing-card-transform')).toBeInTheDocument()
+    expect(screen.getByTestId('shared-processing-card-data_protection')).toBeInTheDocument()
+    expect(screen.getByTestId('shared-processing-card-classification')).toBeInTheDocument()
+    expect(screen.getByTestId('shared-processing-card-policy')).toBeInTheDocument()
+  })
+
+  it('patches shared classification and policy through onChangeDataPolicy', async () => {
+    const onChangeDataPolicy = vi.fn()
+    render(
+      <MemoryRouter>
+        <StepRouteProcessing
+          state={readyState()}
+          onChangeMapping={() => {}}
+          onChangeMappingMode={() => {}}
+          onChangeFullEventJsonata={() => {}}
+          onChangeFullEventRegexConfigJson={() => {}}
+          onChangeEnrichment={() => {}}
+          onChangeDataProtection={() => {}}
+          onChangeDataPolicy={onChangeDataPolicy}
+          onChangeDestinations={() => {}}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByTestId('shared-processing-tab-classification'))
+    fireEvent.change(screen.getByTestId('shared-classification-default-level'), { target: { value: 'RESTRICTED' } })
+    expect(onChangeDataPolicy).toHaveBeenCalledWith({ defaultClassification: 'RESTRICTED' })
+
+    fireEvent.click(screen.getByTestId('shared-processing-tab-policy'))
+    fireEvent.change(screen.getByTestId('shared-policy-restricted-response'), { target: { value: 'block' } })
+    expect(onChangeDataPolicy).toHaveBeenCalledWith({ restrictedResponse: 'block' })
+  })
+
+  it('renders 1 stream / 3 routes inherit, protection override, and classification+policy override', async () => {
+    const state = readyState()
+    state.destinations.routeDrafts = [
+      {
+        key: 'route-a',
+        destinationId: 10,
+        enabled: true,
+        failurePolicy: 'LOG_AND_CONTINUE',
+        rateLimitJson: {},
+        inherit: { transform: true, protection: true, classification: true, policy: true },
+      },
+      {
+        key: 'route-b',
+        destinationId: 20,
+        enabled: true,
+        failurePolicy: 'LOG_AND_CONTINUE',
+        rateLimitJson: {},
+        inherit: { transform: true, protection: false, classification: true, policy: true },
+      },
+      {
+        key: 'route-c',
+        destinationId: 30,
+        enabled: true,
+        failurePolicy: 'LOG_AND_CONTINUE',
+        rateLimitJson: {},
+        inherit: { transform: true, protection: true, classification: false, policy: false },
+        overrides: { policy: { deliveryBehavior: 'quarantine' } },
+      },
+    ]
+    state.dataProtection.routeClassificationOverrides = [
+      {
+        key: 'c1',
+        routeDraftKey: 'route-c',
+        classificationLevel: 'RESTRICTED',
+        enabled: true,
+      },
+    ]
+
+    render(
+      <MemoryRouter>
+        <StepRouteProcessing
+          state={state}
+          onChangeMapping={() => {}}
+          onChangeMappingMode={() => {}}
+          onChangeFullEventJsonata={() => {}}
+          onChangeFullEventRegexConfigJson={() => {}}
+          onChangeEnrichment={() => {}}
+          onChangeDataProtection={() => {}}
+          onChangeDestinations={() => {}}
+        />
+      </MemoryRouter>,
+    )
+
+    const routeA = await screen.findByTestId('route-processing-list-card-route-a')
+    const routeB = screen.getByTestId('route-processing-list-card-route-b')
+    const routeC = screen.getByTestId('route-processing-list-card-route-c')
+    expect(routeA).toHaveTextContent('Shared')
+    expect(within(routeB).getByText('Override')).toBeInTheDocument()
+    expect(within(routeC).getAllByText('Override').length).toBeGreaterThanOrEqual(1)
+
+    fireEvent.click(routeC)
+    fireEvent.click(screen.getByTestId('route-detail-tab-classification'))
+    expect(screen.getByTestId('route-classification-floor')).toHaveValue('RESTRICTED')
+    expect(screen.getByTestId('route-classification-rules')).toBeInTheDocument()
+    fireEvent.click(screen.getByTestId('route-detail-tab-policy'))
+    expect(screen.getByTestId('route-policy-delivery-behavior')).toHaveValue('quarantine')
+    fireEvent.click(screen.getByTestId('route-detail-tab-delivery'))
+    expect(screen.getByTestId('route-processing-enabled-route-c')).toBeInTheDocument()
+  })
+
+  it('lets the operator add a route classification rule on override', () => {
+    const onChangeDestinations = vi.fn()
+    const state = readyState()
+    state.destinations.routeDrafts[0] = {
+      ...state.destinations.routeDrafts[0]!,
+      inherit: { transform: true, protection: true, classification: false, policy: true },
+    }
+    render(
+      <MemoryRouter>
+        <StepRouteProcessing
+          state={state}
+          onChangeMapping={() => {}}
+          onChangeMappingMode={() => {}}
+          onChangeFullEventJsonata={() => {}}
+          onChangeFullEventRegexConfigJson={() => {}}
+          onChangeEnrichment={() => {}}
+          onChangeDataProtection={() => {}}
+          onChangeDestinations={onChangeDestinations}
+        />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByTestId('route-detail-tab-classification'))
+    fireEvent.click(screen.getByTestId('route-classification-rule-add'))
+    expect(onChangeDestinations).toHaveBeenCalledWith(
+      expect.objectContaining({
+        routeDrafts: [
+          expect.objectContaining({
+            overrides: expect.objectContaining({
+              classification: expect.objectContaining({
+                rules: [expect.objectContaining({ sensitivityClass: 'pii', classificationLevel: 'CONFIDENTIAL' })],
+              }),
+            }),
+          }),
+        ],
+      }),
+    )
   })
 })

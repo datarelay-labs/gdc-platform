@@ -14,8 +14,13 @@ import {
   type WizardState,
 } from './wizard-state'
 import { persistWizardDataProtectionIntents } from './wizard-data-protection-persist'
+import { persistWizardSharedAndRoutePolicy } from './wizard-policy-persist'
 import { persistWizardSchemaDriftPolicy } from './wizard-schema-drift-policy-persist'
 import { persistWizardStreamGovernance } from './wizard-governance-persist'
+import { persistWizardRouteTransforms } from './wizard-transform-persist'
+import { persistWizardRouteProtection } from './wizard-route-protection-persist'
+import { persistWizardRouteClassification } from './wizard-classification-persist'
+import { persistWizardFailover } from './wizard-failover-persist'
 
 export type WizardStreamPersistResult = {
   ok: boolean
@@ -151,14 +156,49 @@ export async function persistWizardStreamEdits(streamId: number, state: WizardSt
     if (!protectionResult.saved) errors.push(...protectionResult.errors)
   }
 
+  const routeIds = state.destinations.routeDrafts.map((draft) => routeKeyToId(draft.key))
+  const knownRouteIds = routeIds.filter((id): id is number => id != null)
+
   try {
-    const routeIds = state.destinations.routeDrafts
-      .map((draft) => routeKeyToId(draft.key))
-      .filter((id): id is number => id != null)
-    const governanceResult = await persistWizardStreamGovernance(streamId, state, routeIds)
+    const transformResult = await persistWizardRouteTransforms(state, routeIds)
+    if (!transformResult.saved) errors.push(...transformResult.errors)
+  } catch (err) {
+    errors.push(`route-transform: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  try {
+    const routeProtectionResult = await persistWizardRouteProtection(state, routeIds)
+    if (!routeProtectionResult.saved) errors.push(...routeProtectionResult.errors)
+  } catch (err) {
+    errors.push(`route-protection: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  try {
+    const routeClassificationResult = await persistWizardRouteClassification(state, routeIds)
+    if (!routeClassificationResult.saved) errors.push(...routeClassificationResult.errors)
+  } catch (err) {
+    errors.push(`route-classification: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  try {
+    const failoverResult = await persistWizardFailover(streamId, state.destinations.routeDrafts)
+    if (!failoverResult.saved) errors.push(...failoverResult.errors)
+  } catch (err) {
+    errors.push(`failover: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  try {
+    const governanceResult = await persistWizardStreamGovernance(streamId, state, knownRouteIds)
     if (!governanceResult.saved) errors.push(...governanceResult.errors)
   } catch (err) {
     errors.push(`governance: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  try {
+    const policyResult = await persistWizardSharedAndRoutePolicy(streamId, state, knownRouteIds)
+    if (!policyResult.saved) errors.push(...policyResult.errors)
+  } catch (err) {
+    errors.push(`policy: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   try {

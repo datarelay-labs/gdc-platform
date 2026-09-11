@@ -127,9 +127,15 @@ docs/getting-started/images/04-wizard-destinations.png
 
 ---
 
-## Step 5 — Transform & Route Processing (Wizard: Route Processing)
+## Step 5 — Route Processing (Wizard: Route Processing)
 
 Configure **Shared Processing** (applies to all routes unless overridden) and optional per-route overrides.
+
+Route Processing concerns:
+
+```text
+Transform → Protection → Classification → Policy → Delivery
+```
 
 ### Actions
 
@@ -138,7 +144,7 @@ Configure **Shared Processing** (applies to all routes unless overridden) and op
 3. **Data Protection** (optional) — protection, classification, policy intents.
 4. Per-route cards — set **Inherit Global** or **Override** per concern (Transform, Protection, Classification, Policy).
 
-> **Known limitation:** Route-level override bundles marked **Intent only** at deploy are **not persisted automatically**. After deploy, use **Route Edit** to save full route bundles. See [Known Limitations](../release/KNOWN-LIMITATIONS.md#route-bundle-persist).
+> **Note:** Complete Transform / Protection / Policy overrides persist at deploy. Incomplete classification or protection overrides may still show **Intent only**. See [Known Limitations](../release/KNOWN-LIMITATIONS.md#route-bundle-persist).
 
 ### Screenshot placeholder
 
@@ -173,7 +179,7 @@ docs/getting-started/images/06-wizard-deploy.png
 ### After deploy
 
 - Stream appears on **Streams** console under its product group.
-- Routes are listed under **Delivery → Routes**.
+- Routes are visible from the stream detail / Destinations context (Routes is not a primary sidebar item).
 
 ---
 

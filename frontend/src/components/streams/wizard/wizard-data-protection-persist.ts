@@ -6,6 +6,7 @@ import {
   wizardProtectionActionToMode,
 } from '../../../api/gdcProtection'
 import { inferWizardSensitivityClass } from './wizard-data-protection-fields'
+import type { UnionSchema } from '../../../utils/unionSchema'
 import {
   buildProtectionPathAliasMap,
   buildWizardEnrichedEventForProtection,
@@ -75,13 +76,17 @@ function classificationLevelForAction(action: WizardProtectionAction): Classific
   }
 }
 
-function aggregateIntents(intents: WizardDataProtectionIntent[]): AggregatedClassIntent[] {
+function aggregateIntents(
+  intents: WizardDataProtectionIntent[],
+  unionSchema?: UnionSchema | null,
+): AggregatedClassIntent[] {
   const byClass = new Map<WizardSensitivityClass, AggregatedClassIntent>()
 
   for (const intent of intents) {
     if (!wizardDataProtectionIntentReady(intent)) continue
     const fieldPath = intent.detectedField.trim()
-    const sensitivityClass = inferWizardSensitivityClass(fieldPath)
+    const sensitivityClass = inferWizardSensitivityClass(fieldPath, unionSchema)
+    if (!sensitivityClass) continue
     const existing = byClass.get(sensitivityClass)
     const classificationLevel = classificationLevelForAction(intent.protectionAction)
     const needsFieldProtection = protectionActionNeedsFieldRule(intent.protectionAction)
@@ -137,13 +142,16 @@ function classificationRuleName(sensitivityClass: WizardSensitivityClass): strin
   }
 }
 
-export function buildDataProtectionPersistPreview(state: WizardDataProtectionState): {
+export function buildDataProtectionPersistPreview(
+  state: WizardDataProtectionState,
+  unionSchema?: UnionSchema | null,
+): {
   aggregated: AggregatedClassIntent[]
   enforcementIncomplete: boolean
   warnings: string[]
 } {
   const validIntents = state.intents.filter(wizardDataProtectionIntentReady)
-  const aggregated = aggregateIntents(validIntents)
+  const aggregated = aggregateIntents(validIntents, unionSchema)
   const warnings: string[] = []
 
   if (validIntents.some((intent) => intent.deliveryBehavior === 'block')) {
@@ -178,10 +186,12 @@ export async function resolveWizardProtectionIntents(
   for (const intent of fieldIntents) {
     const result = resolveProtectionFieldPath(intent.detectedField, enriched.paths, aliasMap)
     if (result.ok) {
+      const sensitivityClass = inferWizardSensitivityClass(result.resolvedPath, state.apiTest.unionSchema)
+      if (!sensitivityClass) continue
       resolved.push({
         intent,
         resolvedPath: result.resolvedPath,
-        sensitivityClass: inferWizardSensitivityClass(result.resolvedPath),
+        sensitivityClass,
         protectionMode: wizardProtectionActionToMode(
           intent.protectionAction as 'mask_partial' | 'mask_full' | 'tokenize' | 'hash' | 'drop_field',
         ),
@@ -215,7 +225,7 @@ export async function persistWizardDataProtectionIntents(
     }
   }
 
-  const preview = buildDataProtectionPersistPreview(state.dataProtection)
+  const preview = buildDataProtectionPersistPreview(state.dataProtection, state.apiTest.unionSchema)
   const pathResolution = await resolveWizardProtectionIntents(state)
   const result: DataProtectionPersistResult = {
     policyRulesCreated: 0,

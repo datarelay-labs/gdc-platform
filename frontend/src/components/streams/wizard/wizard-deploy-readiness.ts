@@ -244,6 +244,14 @@ function evaluateRouteDeployHealth(
   const errorReasons: string[] = []
   const warningReasons: string[] = []
 
+  if (route.enabled && intentOnlyConcerns.length > 0) {
+    errorReasons.push(
+      `Incomplete ${intentOnlyConcerns
+        .map((concern) => ROUTE_PROCESSING_CONCERN_LABEL[concern])
+        .join(', ')} override — add a persistable payload or switch back to Inherit`,
+    )
+  }
+
   const missingDestination = !route.destinationId || route.destinationId <= 0
   if (route.enabled && missingDestination) {
     errorReasons.push('No destination configured')
@@ -382,8 +390,12 @@ export function computeDeployReadiness(
   const dataOk = wizardApiTestReady(state)
   const sampleCount = resolveUnionSchemaSampleCount(state.apiTest)
   const samplePolicy = getUnionSchemaSampleStatus(sampleCount)
+  const noSampleRecords =
+    state.apiTest.status === 'success' &&
+    sampleCount === 0 &&
+    (state.apiTest.unionSchema == null || !state.apiTest.unionSchema.fields.length)
   const samplePolicyWarn = dataOk && state.apiTest.unionSchema != null && samplePolicy.status !== 'ready'
-  const dataWarn = (state.apiTest.status === 'success' && !state.apiTest.ok) || samplePolicyWarn
+  const dataWarn = (state.apiTest.status === 'success' && !state.apiTest.ok) || samplePolicyWarn || noSampleRecords
 
   const recordsBlocked = !eventPathOk || !checkpointOk
   const recordsOk = !recordsBlocked && incrementalTestWarn.level !== 'warning'
@@ -414,7 +426,13 @@ export function computeDeployReadiness(
     (protectionPreview.enforcementIncomplete || protectionPreview.warnings.length > 0)
 
   const routeProcessingSummary = buildRouteProcessingSummary(state)
-  const routeProcessingOk = wizardDestinationGateReady(state) && transformOk && protectionOk
+  const routeIntentOnlyBlocked = state.destinations.routeDrafts.some((draft) => {
+    if (!draft.enabled) return false
+    const projection = projectRouteProcessingStatusFromDeployIntent(draft, state.dataProtection)
+    return routeIntentOnlyConcernsFromProjection(projection).length > 0
+  })
+  const routeProcessingOk =
+    wizardDestinationGateReady(state) && transformOk && protectionOk && !routeIntentOnlyBlocked
   const routeProcessingWarn =
     wizardDestinationGateReady(state) &&
     !routeProcessingOk &&
@@ -426,7 +444,7 @@ export function computeDeployReadiness(
     connectionWarn,
   )
 
-  const dataTone = !dataOk ? categoryTone(dataOk, dataWarn) : samplePolicyWarn ? 'warn' : 'ok'
+  const dataTone = noSampleRecords ? 'err' : !dataOk ? categoryTone(dataOk, dataWarn) : samplePolicyWarn ? 'warn' : 'ok'
 
   const recordsTone = categoryTone(recordsOk, recordsWarn)
 
@@ -452,20 +470,25 @@ export function computeDeployReadiness(
       key: 'data',
       label: 'Data',
       tone: dataTone,
-      summary: dataOk
-        ? samplePolicy.status === 'needs_attention'
-          ? 'Sample fetched — Union Schema needs attention'
-          : samplePolicy.status === 'warning'
-            ? 'Sample fetched — more events recommended'
-            : 'Sample data fetched successfully'
-        : dataWarn
-          ? 'Sample returned — review response status'
-          : 'Run a successful sample fetch',
-      detail: samplePolicyWarn
-        ? samplePolicy.message ?? undefined
-        : dataWarn && !dataOk
-          ? state.apiTest.errorMessage ?? undefined
-          : undefined,
+      summary: noSampleRecords
+        ? 'Sample data not available (no records) — Union Schema not generated'
+        : dataOk
+          ? samplePolicy.status === 'needs_attention'
+            ? 'Sample fetched — Union Schema needs attention'
+            : samplePolicy.status === 'warning'
+              ? 'Sample fetched — more events recommended'
+              : 'Sample data fetched successfully'
+          : dataWarn
+            ? 'Sample returned — review response status'
+            : 'Run a successful sample fetch',
+      detail: noSampleRecords
+        ? state.apiTest.errorMessage ||
+          'Connection succeeded, but no sample records were returned. Union Schema was not generated.'
+        : samplePolicyWarn
+          ? samplePolicy.message ?? undefined
+          : dataWarn && !dataOk
+            ? state.apiTest.errorMessage ?? undefined
+            : undefined,
       stepKey: 'api_test',
     },
     {
@@ -526,11 +549,14 @@ export function computeDeployReadiness(
       tone: routeProcessingTone,
       summary: routeProcessingOk
         ? `${routeProcessingSummary.enabledRoutes} enabled route${routeProcessingSummary.enabledRoutes === 1 ? '' : 's'} · ${routeProcessingSummary.totalRoutes} total · Transform: ${routeProcessingSummary.transformLabel} · Protection: ${routeProcessingSummary.protectionLabel}`
-        : routeProcessingWarn
+        : routeIntentOnlyBlocked
+          ? 'Incomplete route override — add a persistable payload or switch back to Inherit'
+          : routeProcessingWarn
           ? 'Route processing needs attention — review transform, protection, or enabled routes'
           : 'Add at least one enabled delivery path and configure stream transform',
-      detail:
-        routeProcessingSummary.enabledRoutes === 0 && routeProcessingSummary.totalRoutes > 0
+      detail: routeIntentOnlyBlocked
+        ? 'Protection or Classification marked Override without a persistable payload cannot be deployed.'
+        : routeProcessingSummary.enabledRoutes === 0 && routeProcessingSummary.totalRoutes > 0
           ? 'Enable at least one route before deploying.'
           : undefined,
       stepKey: 'mapping',

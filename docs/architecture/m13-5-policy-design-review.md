@@ -1,6 +1,9 @@
 # M13.5 Per Route Policy — Design Review
 
-**Status:** Design review only — no code, implementation, or migrations  
+**Status:** SUPERSEDED (historical design review)  
+**Superseded By:** [`specs/095-per-route-policy`](../../specs/095-per-route-policy/spec.md)
+
+Design review only — no code, implementation, or migrations  
 **Date:** 2026-06-16  
 **Scope:** Spec 095 validation; compatibility with M13.6 (Route Runtime Delivery)  
 **Inputs:**

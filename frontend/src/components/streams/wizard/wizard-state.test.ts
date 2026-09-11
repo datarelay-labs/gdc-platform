@@ -11,8 +11,10 @@ import {
   buildWizardFieldMappingsPayload,
   enrichmentDictFromRows,
   fieldMappingsFromRows,
+  wizardConnectorPatchFromApi,
   wizardFieldMappingsReady,
 } from './wizard-state'
+import type { ConnectorRead } from '../../../api/gdcConnectors'
 
 function withConfirmedSample(state: ReturnType<typeof buildInitialState>) {
   const finishedAt = Date.now()
@@ -91,6 +93,42 @@ describe('wizard-state computeLegacySubstepCompletion', () => {
     state.apiTest.s3ConnectivityPassed = false
     expect(computeLegacySubstepCompletion(state).api_test).toBe('in_progress')
     state.apiTest.s3ConnectivityPassed = true
+    expect(computeLegacySubstepCompletion(state).api_test).toBe('complete')
+  })
+
+  it('marks stream incomplete for DATABASE_QUERY without SQL query', () => {
+    const state = buildInitialState()
+    state.connector.connectorId = 1
+    state.connector.sourceId = 2
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.name = 'DB stream'
+    state.stream.endpoint = ''
+    state.stream.sqlQuery = ''
+    expect(computeLegacySubstepCompletion(state).stream).toBe('in_progress')
+  })
+
+  it('marks stream complete for DATABASE_QUERY with SQL query and no HTTP endpoint', () => {
+    const state = buildInitialState()
+    state.connector.connectorId = 1
+    state.connector.sourceId = 2
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.name = 'DB stream'
+    state.stream.endpoint = ''
+    state.stream.sqlQuery = 'SELECT id, email, created_at FROM users'
+    expect(computeLegacySubstepCompletion(state).stream).toBe('complete')
+  })
+
+  it('requires dbConnectivityPassed before api_test completes for DATABASE_QUERY connectors', () => {
+    const state = buildInitialState()
+    state.connector.connectorId = 1
+    state.connector.sourceId = 2
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.name = 'DB stream'
+    state.stream.sqlQuery = 'SELECT id FROM users'
+    state.apiTest.status = 'success'
+    state.apiTest.dbConnectivityPassed = false
+    expect(computeLegacySubstepCompletion(state).api_test).toBe('in_progress')
+    state.apiTest.dbConnectivityPassed = true
     expect(computeLegacySubstepCompletion(state).api_test).toBe('complete')
   })
 
@@ -308,6 +346,28 @@ describe('wizard-state buildStreamConfigPayload', () => {
     expect(payload.event_root_path).toBe('$.payload')
   })
 
+  it('serializes S3 max_objects_per_run without HTTP endpoint fields', () => {
+    const state = buildInitialState()
+    state.connector.sourceType = 'S3_OBJECT_POLLING'
+    state.stream.maxObjectsPerRun = 12
+    state.stream.endpoint = '/v1/events'
+    const payload = buildStreamConfigPayload(state) as Record<string, unknown>
+    expect(payload).toEqual({ max_objects_per_run: 12 })
+  })
+
+  it('serializes DATABASE_QUERY query without HTTP endpoint fields', () => {
+    const state = buildInitialState()
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.sqlQuery = 'SELECT id, email, created_at FROM users'
+    state.stream.timeoutSec = 20
+    state.stream.endpoint = '/v1/events'
+    const payload = buildStreamConfigPayload(state) as Record<string, unknown>
+    expect(payload).toEqual({
+      query: 'SELECT id, email, created_at FROM users',
+      query_timeout_seconds: 20,
+    })
+  })
+
   it('omits event_array_path when useWholeResponseAsEvent is true', () => {
     const state = buildInitialState()
     state.stream.eventArrayPath = '$.items'
@@ -321,6 +381,24 @@ describe('wizard-state buildStreamCreatePayload', () => {
   it('returns null when connector or source is missing', () => {
     const state = buildInitialState()
     expect(buildStreamCreatePayload(state)).toBeNull()
+  })
+
+  it('returns DATABASE_QUERY stream_type and query stream_config when connector is DATABASE_QUERY', () => {
+    const state = buildInitialState()
+    state.connector.connectorId = 11
+    state.connector.sourceId = 22
+    state.connector.sourceType = 'DATABASE_QUERY'
+    state.stream.name = 'DB stream'
+    state.stream.sqlQuery = 'SELECT id, email FROM users'
+    state.stream.timeoutSec = 15
+    const payload = buildStreamCreatePayload(state)
+    expect(payload?.stream_type).toBe('DATABASE_QUERY')
+    expect(payload?.config_json).toMatchObject({
+      query: 'SELECT id, email FROM users',
+      query_timeout_seconds: 15,
+    })
+    expect(payload?.config_json).not.toHaveProperty('endpoint')
+    expect(payload?.config_json).not.toHaveProperty('method')
   })
 
   it('returns REMOTE_FILE_POLLING stream_type and remote stream_config when connector is REMOTE_FILE_POLLING', () => {
@@ -343,6 +421,29 @@ describe('wizard-state buildStreamCreatePayload', () => {
       max_files_per_run: 3,
       max_file_size_mb: 2,
     })
+  })
+})
+
+describe('wizardConnectorPatchFromApi', () => {
+  it('maps DATABASE_QUERY source type instead of falling back to HTTP', () => {
+    const row = {
+      id: 9,
+      name: 'Orders DB',
+      description: null,
+      status: 'active',
+      connector_type: 'relational_database',
+      source_type: 'DATABASE_QUERY',
+      source_id: 3,
+      stream_count: 0,
+      host: 'db.internal',
+      base_url: null,
+      verify_ssl: true,
+      http_proxy: null,
+      common_headers: {},
+      auth_type: 'no_auth',
+      auth: {},
+    } as ConnectorRead
+    expect(wizardConnectorPatchFromApi(row).sourceType).toBe('DATABASE_QUERY')
   })
 })
 

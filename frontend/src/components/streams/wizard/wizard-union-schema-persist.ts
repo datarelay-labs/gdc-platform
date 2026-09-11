@@ -1,10 +1,12 @@
 import { fetchStreamById, updateStream } from '../../../api/gdcStreams'
 import type { UnionSchema } from '../../../utils/unionSchema'
+import { enrichUnionSchemaWithSensitiveSuggestions } from '../../../utils/unionSchemaSensitiveSuggestions'
 
 export type UnionSchemaPersistPayload = {
   total_events: number
   fields: UnionSchema['fields']
   snapshot_at: string
+  sensitive_suggestions_applied?: boolean
 }
 
 export type UnionSchemaPersistResult = {
@@ -20,15 +22,23 @@ export function buildUnionSchemaPersistPayload(
     total_events: unionSchema.total_events,
     fields: unionSchema.fields,
     snapshot_at: new Date().toISOString(),
+    sensitive_suggestions_applied: unionSchema.sensitive_suggestions_applied === true,
   }
 }
 
 export async function persistWizardUnionSchema(
   streamId: number,
   unionSchema: UnionSchema | null | undefined,
-  options?: { existingConfigJson?: Record<string, unknown> | null },
+  options?: {
+    existingConfigJson?: Record<string, unknown> | null
+    events?: ReadonlyArray<Record<string, unknown>>
+  },
 ): Promise<UnionSchemaPersistResult> {
-  const payload = buildUnionSchemaPersistPayload(unionSchema)
+  let schema = unionSchema ?? null
+  if (schema?.fields.length && options?.events?.length && schema.sensitive_suggestions_applied !== true) {
+    schema = await enrichUnionSchemaWithSensitiveSuggestions(schema, options.events)
+  }
+  const payload = buildUnionSchemaPersistPayload(schema)
   if (payload == null) {
     return { saved: false, errors: [] }
   }

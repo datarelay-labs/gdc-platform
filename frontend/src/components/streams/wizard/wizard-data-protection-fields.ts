@@ -1,51 +1,7 @@
-import { evaluateUnionFieldSuggestion } from '../../../utils/evaluateUnionFieldSuggestion'
+import { isUnionFieldSensitive } from '../../../utils/unionSchemaFieldDisplay'
+import type { UnionSchema } from '../../../utils/unionSchema'
 import type { WizardSensitivityClass, WizardState } from './wizard-state'
-import {
-  collectWizardProtectionFieldCandidatesSync,
-  collectWizardProtectionFieldSamplesSync,
-} from './wizard-data-protection-path-resolve'
-
-const SECRET_LEAF_HINTS = new Set([
-  'password',
-  'passwd',
-  'secret',
-  'token',
-  'api_key',
-  'apikey',
-  'access_token',
-  'refresh_token',
-  'private_key',
-  'client_secret',
-  'authorization',
-  'auth',
-  'credential',
-  'session',
-  'cookie',
-])
-
-const PII_LEAF_HINTS = new Set([
-  'email',
-  'e_mail',
-  'phone',
-  'mobile',
-  'ssn',
-  'social_security',
-  'name',
-  'first_name',
-  'last_name',
-  'fullname',
-  'full_name',
-  'address',
-  'zip',
-  'postal',
-  'dob',
-  'birth',
-  'ip',
-  'user_id',
-  'customer_id',
-])
-
-const SECURITY_METADATA_LEAF_HINTS = new Set(['role', 'permission', 'scope', 'group', 'tenant', 'org_id'])
+import { collectWizardProtectionFieldCandidatesSync } from './wizard-data-protection-path-resolve'
 
 function leafSegment(fieldPath: string): string {
   const trimmed = fieldPath.trim()
@@ -53,21 +9,39 @@ function leafSegment(fieldPath: string): string {
   return leaf.replace(/\[\d+\]/g, '').replace(/^\$\.?/, '').toLowerCase()
 }
 
-export function inferWizardSensitivityClass(fieldPath: string): WizardSensitivityClass {
+function normalizeSensitivityClass(value: string | null | undefined): WizardSensitivityClass | null {
+  if (value === 'secret' || value === 'pii' || value === 'security_metadata') return value
+  return null
+}
+
+function classFromUnionField(
+  field: { sensitivity_class?: string | null } | undefined,
+): WizardSensitivityClass | null | undefined {
+  if (!field) return undefined
+  const mapped = normalizeSensitivityClass(field.sensitivity_class)
+  if (mapped) return mapped
+  // attachSensitiveSuggestions writes null when the backend evaluated the field as not sensitive.
+  if (field.sensitivity_class === null) return null
+  return undefined
+}
+
+/**
+ * Backend Union Schema `sensitivity_class` is the source of truth.
+ * Returns null when backend already evaluated the field as not sensitive.
+ * Legacy `pii` fallback applies only when no backend result exists for the path.
+ */
+export function inferWizardSensitivityClass(
+  fieldPath: string,
+  unionSchema?: UnionSchema | null,
+): WizardSensitivityClass | null {
+  const fields = unionSchema?.fields ?? []
+  const exact = classFromUnionField(fields.find((field) => field.field_path === fieldPath))
+  if (exact !== undefined) return exact
   const leaf = leafSegment(fieldPath)
-  if (!leaf) return 'pii'
-  if (SECRET_LEAF_HINTS.has(leaf)) return 'secret'
-  for (const hint of SECRET_LEAF_HINTS) {
-    if (leaf.includes(hint)) return 'secret'
-  }
-  if (SECURITY_METADATA_LEAF_HINTS.has(leaf)) return 'security_metadata'
-  for (const hint of SECURITY_METADATA_LEAF_HINTS) {
-    if (leaf.includes(hint)) return 'security_metadata'
-  }
-  if (PII_LEAF_HINTS.has(leaf)) return 'pii'
-  for (const hint of PII_LEAF_HINTS) {
-    if (leaf.includes(hint)) return 'pii'
-  }
+  const byLeaf = classFromUnionField(
+    fields.find((field) => leafSegment(field.field_path) === leaf),
+  )
+  if (byLeaf !== undefined) return byLeaf
   return 'pii'
 }
 
@@ -83,20 +57,14 @@ export function collectWizardDetectedFieldCandidates(state: WizardState): string
   return collectWizardProtectionFieldCandidatesSync(state)
 }
 
-export function suggestLikelySensitiveFields(
-  candidates: readonly string[],
-  sampleValuesByPath?: ReadonlyMap<string, readonly unknown[]>,
-): string[] {
-  return candidates.filter((path) => {
-    const samples = sampleValuesByPath?.get(path)
-    return evaluateUnionFieldSuggestion(path, undefined, samples).sensitive
-  })
-}
-
 export function suggestLikelySensitiveFieldsFromState(state: WizardState): string[] {
-  const candidates = collectWizardDetectedFieldCandidates(state)
-  const sampleValuesByPath = collectWizardProtectionFieldSamplesSync(state)
-  return suggestLikelySensitiveFields(candidates, sampleValuesByPath)
+  const suggestedFields = (state.apiTest.unionSchema?.fields ?? []).filter(isUnionFieldSensitive)
+  if (suggestedFields.length === 0) return []
+  const suggestedLeaves = new Set(suggestedFields.map((field) => leafSegment(field.field_path)))
+  const suggestedPaths = new Set(suggestedFields.map((field) => field.field_path))
+  return collectWizardDetectedFieldCandidates(state).filter((path) => {
+    return suggestedPaths.has(path) || suggestedLeaves.has(leafSegment(path))
+  })
 }
 
 export function sensitivityClassLabel(sensitivityClass: WizardSensitivityClass): string {

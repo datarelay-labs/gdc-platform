@@ -135,6 +135,20 @@ def test_path_resolve_mapping_alias() -> None:
     assert result.resolved_path == "$.email"
 
 
+def test_path_resolve_prefers_mapping_alias_on_extracted_event() -> None:
+    alias_map = build_protection_path_alias_map(
+        field_mappings={"email": "$.user.email"},
+        enrichment_json={},
+    )
+    result = resolve_protection_field_path(
+        "$.user.email",
+        ["$.user.email", "$.user.id", "$.message"],
+        alias_map,
+    )
+    assert result.ok is True
+    assert result.resolved_path == "$.email"
+
+
 def test_path_resolve_failure_does_not_block_orchestrator(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.config.settings.GDC_SCHEMA_DRIFT_POLICY_ENABLED", True)
     fixture = _seed_stream_runtime(db_session)
@@ -181,7 +195,7 @@ def test_unknown_normal_pass_through_delivers(
     assert len(sender.calls) == 1
 
 
-def test_unknown_normal_require_review_delivers_with_review_log(
+def test_unknown_normal_require_review_blocks_delivery_with_review_log(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -206,7 +220,7 @@ def test_unknown_normal_require_review_delivers_with_review_log(
     ctx = load_stream_context(db_session, stream_id)
     runner.run(ctx, db=db_session)
 
-    assert len(sender.calls) == 1
+    assert len(sender.calls) == 0
     review_logs = [
         log
         for log in runner.captured_logs
@@ -218,7 +232,7 @@ def test_unknown_normal_require_review_delivers_with_review_log(
     assert review_logs[0]["sensitive"] is False
 
     cp_after = db_session.query(Checkpoint).filter(Checkpoint.stream_id == stream_id).one()
-    assert cp_after.checkpoint_value_json != cp_before
+    assert cp_after.checkpoint_value_json == cp_before
 
 
 def test_unknown_normal_quarantine_blocks_delivery_and_checkpoint(
@@ -274,7 +288,37 @@ def test_unknown_normal_quarantine_blocks_delivery_and_checkpoint(
     assert cp_after.checkpoint_value_json == cp_before
 
 
-def test_unknown_sensitive_require_review_delivers_with_review_log(
+def test_schema_drift_quarantine_persists_when_process_routes_db_none(
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """process_routes(db=None) must still persist the route-policy quarantine row."""
+    monkeypatch.setattr("app.config.settings.GDC_ROUTE_PROCESSING_ENABLED", True)
+    fixture = _seed_stream_runtime(db_session)
+    stream_id = fixture["stream_id"]
+    _configure_nickname_mapping(db_session, stream_id)
+    _set_schema_drift_policy(db_session, stream_id, normal="quarantine", sensitive="auto_protect")
+    _add_open_drift(db_session, stream_id, "$.user.nickname")
+
+    monkeypatch.setattr("app.config.settings.GDC_SENSITIVE_DETECTION_ENABLED", True)
+    monkeypatch.setattr("app.config.settings.GDC_SCHEMA_DRIFT_POLICY_ENABLED", True)
+    poller = _FakePoller(
+        response={"items": [{"id": "evt-1", "user": {"nickname": "alice"}, "message": "hello"}]}
+    )
+    sender = _FakeWebhookSender()
+    runner = _build_runner(poller=poller, webhook_sender=sender)
+    ctx = load_stream_context(db_session, stream_id)
+    runner.run(ctx, db=None)
+
+    assert len(sender.calls) == 0
+    db_session.expire_all()
+    quarantine_row = (
+        db_session.query(StreamQuarantineEvent).filter(StreamQuarantineEvent.stream_id == stream_id).one()
+    )
+    assert quarantine_row.metadata_json["policy_names"] == ["schema_drift:unknown_normal"]
+
+
+def test_unknown_sensitive_require_review_blocks_delivery_with_review_log(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -294,7 +338,7 @@ def test_unknown_sensitive_require_review_delivers_with_review_log(
     ctx = load_stream_context(db_session, stream_id)
     runner.run(ctx, db=db_session)
 
-    assert len(sender.calls) == 1
+    assert len(sender.calls) == 0
     review_logs = [
         log
         for log in runner.captured_logs

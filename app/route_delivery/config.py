@@ -58,3 +58,5 @@ class RouteDeliveryResult:
     delivery_log_id: int | None
     health_level: RouteHealthLevel = "healthy"
     failure_absorbed: bool = False
+    failover_attempted: bool = False
+    failover_succeeded: bool = False

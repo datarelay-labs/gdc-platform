@@ -42,6 +42,20 @@ const PATHS: PathDef[] = [
     match: (a) => a.route_topology === 'MULTI_ROUTE_MIXED_PROTECTION_OVERRIDE',
   },
   {
+    id: 'policy-override',
+    match: (a) => a.route_topology === 'MULTI_ROUTE_MIXED_POLICY_OVERRIDE',
+  },
+  {
+    id: 'browser-mixed-transform',
+    match: (a) =>
+      a.execution_surface === 'BROWSER' && a.route_topology === 'MULTI_ROUTE_MIXED_TRANSFORM_OVERRIDE',
+  },
+  {
+    id: 'browser-mixed-policy',
+    match: (a) =>
+      a.execution_surface === 'BROWSER' && a.route_topology === 'MULTI_ROUTE_MIXED_POLICY_OVERRIDE',
+  },
+  {
     id: 'delivery-continue',
     match: (a) => a.delivery_behavior === 'continue' && a.fault_type === 'NONE',
   },

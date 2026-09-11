@@ -18,9 +18,17 @@ type UnionSchemaStatusCardProps = {
   className?: string
 }
 
-function pendingMessage(state: Pick<WizardState, 'stream' | 'apiTest'>): string {
+function pendingMessage(state: Pick<WizardState, 'stream' | 'apiTest'>, extractedEventCount: number): string {
   const recordReady = wizardRecordPathConfirmed(state)
   const eventRootReady = wizardEventRootConfirmed(state)
+  if (
+    state.apiTest.status === 'success' &&
+    extractedEventCount === 0 &&
+    (state.apiTest.eventCount === 0 ||
+      (Array.isArray(state.apiTest.parsedJson) && state.apiTest.parsedJson.length === 0))
+  ) {
+    return 'Sample data is not available (no records). Union Schema was not generated.'
+  }
   if (!recordReady && !eventRootReady) {
     return 'Union Schema not generated yet. Select Record Path and Event Root.'
   }
@@ -61,7 +69,7 @@ export function UnionSchemaStatusCard({ state, extractedEventCount, className }:
           ) : (
             <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
           )}
-          <p className="leading-snug">{pendingMessage(state)}</p>
+          <p className="leading-snug">{pendingMessage(state, extractedEventCount)}</p>
         </div>
       </div>
     )

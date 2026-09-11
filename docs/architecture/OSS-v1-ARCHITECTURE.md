@@ -1,8 +1,8 @@
 # Data Relay OSS v1 — Architecture Overview
 
 **Audience:** Operators, integrators, and contributors  
-**Authority:** [`PRODUCT-CHARTER`](../source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FINAL.txt), [`master-design.md`](../master-design.md)  
-**Scope:** OSS v1.0 GA — stream-scoped runtime default (`GDC_ROUTE_PROCESSING_ENABLED=false`)
+**Authority:** [`PRODUCT-CHARTER`](../source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FINAL.txt), [`source-of-truth-index.md`](source-of-truth-index.md)  
+**Scope:** OSS v1 — Route Processing runtime default (`GDC_ROUTE_PROCESSING_ENABLED=true`)
 
 ---
 
@@ -101,14 +101,20 @@ Source Adapter (HTTP / Webhook / DB Query)
 **Code entry:** `app/runners/stream_runner.py`  
 **Spec:** `specs/002-runtime-pipeline/spec.md`, `specs/004-delivery-routing/spec.md`
 
-### Experimental path
+### Default path (Route Processing)
 
-When `GDC_ROUTE_PROCESSING_ENABLED=true`:
+When `GDC_ROUTE_PROCESSING_ENABLED=true` (product default):
 
 - Per-route pipeline loop (`process_route_pipeline`)
-- Stream-level mapping/enrichment skipped in favor of route-scoped transform
-- Failover and Replay **not** wired on per-route delivery path
-- **Not recommended for production** in OSS v1.0 GA
+- Stream-level mapping/enrichment applied per route (inherit or override)
+- Delivery, Failover, and Replay recording reuse the shared StreamRunner primitive (`_send_route_events`)
+
+### Compatibility path
+
+When `GDC_ROUTE_PROCESSING_ENABLED=false`:
+
+- Stream-scoped mapping, enrichment, protection, classification, policy
+- Legacy fan-out still uses the same `_send_route_events` primitive (Failover + Replay)
 
 ---
 
@@ -131,13 +137,11 @@ Checkpoint stores source position (HTTP offset, DB cursor, file mtime, S3 key, e
 
 | Aspect | Detail |
 |--------|--------|
-| **Recording** | On successful delivery path (legacy fan-out) |
+| **Recording** | On final destination failure (legacy fan-out and Route Processing path) |
 | **Storage** | `stream_replay_events` table |
 | **Re-execution** | Protected payload only — not full pipeline re-run |
 | **Operator UI** | Governance → Replay Center |
 | **Spec** | `specs/068-replay-engine/spec.md` |
-
-**Limitation:** Replay recording not connected when `GDC_ROUTE_PROCESSING_ENABLED=true`.
 
 ---
 
@@ -167,7 +171,7 @@ Checkpoint stores source position (HTTP offset, DB cursor, file mtime, S3 key, e
 | **Configuration** | `stream_failover_routes` DB records |
 | **Spec** | `specs/067-failover-routing/spec.md` |
 
-**Limitation:** Failover runs on legacy `_fan_out` path only; not on per-route pipeline when flag ON.
+Failover uses the existing Active/Standby engine from both the legacy fan-out and the Route Processing delivery primitive.
 
 ---
 
@@ -190,7 +194,7 @@ Route (per destination)
 
 **Effective Status:** Each route exposes Inherited / Overridden / Mixed via Effective API — used in Route Edit and Governance Workspace.
 
-**Persist gap (OSS v1.0):** Wizard route **bundles** (`inherit=false`) may deploy as **Intent only**. Post-deploy Route Edit persists full bundles. See [Known Limitations](../release/KNOWN-LIMITATIONS.md).
+**Persist kinds (current wizard deploy):** Complete Transform override → `route_transform`; complete Protection override → `route_protection`; Policy / field-level governance → `governance`. Incomplete classification or protection override without payload may still be **Intent only**. See [Known Limitations](../release/KNOWN-LIMITATIONS.md).
 
 ---
 
@@ -201,8 +205,8 @@ Route (per destination)
 | Dashboard | `/monitoring` | Operational health, drill-down |
 | Streams | `/streams` | Group-based stream operations |
 | Stream Runtime | `/streams/:id/runtime` | Per-stream monitoring and control |
-| Routes | `/routes` | Route list and edit |
-| Governance | `/governance/*` | Optional control plane |
+| Routes | `/routes` | Route list and edit (deep-link; not primary sidebar) |
+| Governance | `/governance/*` | Optional control plane (RBAC deep-link; not primary sidebar) |
 
 **OSS release mode:** Internal surfaces (validation lab, connector catalog, templates) hidden via `VITE_OSS_RELEASE_MODE` and route guards.
 
@@ -235,9 +239,10 @@ Route (per destination)
 
 | Document | Topic |
 |----------|-------|
-| [master-design.md](../master-design.md) | Full design reference |
+| [Source of Truth Index](source-of-truth-index.md) | Reading order and classification |
+| [master-design.md](../master-design.md) | Historical design (SUPERSEDED) |
 | [Route Processing UX Spec](../ux/DATA-RELAY-ROUTE-PROCESSING-UX-SPEC.md) | Inherit/override UX |
-| [Route Persist Roadmap](./route-processing-persist-roadmap.md) | v1.x bundle persist backlog |
+| [Route Persist Roadmap](./route-processing-persist-roadmap.md) | Persist kinds and remaining gaps |
 | [Runtime Capability Matrix](../runtime/runtime-capability-matrix.md) | Feature matrix |
 | [Getting Started](../getting-started/GETTING-STARTED.md) | First pipeline walkthrough |
 

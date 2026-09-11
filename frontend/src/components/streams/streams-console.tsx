@@ -100,6 +100,7 @@ import {
   productGroupOptions,
   sortGroupsProblemFirst,
   sortStreamsProblemFirst,
+  streamIdsMatchingOperationalFilter,
   type StreamsQuickFilter,
 } from '../../lib/streams-console-operations'
 import {
@@ -107,8 +108,13 @@ import {
   streamOperationalHealthLabel,
   streamSeverityFromCauses,
 } from '../../lib/stream-console-issue-causes'
-import type { StreamsMetricsWindow } from '../../constants/streamConsoleFilters'
-import { parseConnectorFilterFromSearch, connectorFilterIsNumericId } from '../../constants/streamConsoleFilters'
+import {
+  parseConnectorFilterFromSearch,
+  parseStreamsOperationalFilterFromSearch,
+  connectorFilterIsNumericId,
+  type StreamsMetricsWindow,
+  type StreamsOperationalFilter,
+} from '../../constants/streamConsoleFilters'
 import { isDevValidationLabUiEnabled } from '../../lib/feature-flags'
 import { operationalRunControlTooltipSupplement } from '../../utils/streamOperationalBadges'
 import { DevValidationBadge } from '../shell/dev-validation-badge'
@@ -651,8 +657,9 @@ function OverallHealthBeacon({ kpi, loading }: { kpi: StreamsPageKpi; loading?: 
 // ─── System Health Summary Strip ─────────────────────────────────────────────
 
 function computeHealthSummaryItems(rows: readonly StreamConsoleRow[]) {
-  let noData = 0, lowVolume = 0, checkpointLag = 0, destFailure = 0, deliveryRetry = 0, disabled = 0
+  let noData = 0, lowVolume = 0, checkpointLag = 0, destFailure = 0, deliveryRetry = 0, disabled = 0, schemaDrift = 0
   for (const row of rows) {
+    if ((row.openSchemaFieldDriftCount ?? 0) > 0) schemaDrift++
     if (row.status === 'STOPPED') { disabled++; continue }
     if (!row.hasRuntimeApiSnapshot) { noData++; continue }
     if (row.ingestEps <= 0 && (row.eps1m ?? 0) <= 0 && (row.eps5m ?? 0) <= 0) lowVolume++
@@ -660,42 +667,85 @@ function computeHealthSummaryItems(rows: readonly StreamConsoleRow[]) {
     if (row.routesError > 0) destFailure++
     if (row.recentErrors.length > 0) deliveryRetry++
   }
-  return { noData, lowVolume, checkpointLag, destFailure, deliveryRetry, disabled }
+  return { noData, lowVolume, checkpointLag, destFailure, deliveryRetry, disabled, schemaDrift }
 }
 
-function SystemHealthSummaryStrip({ rows, loading }: { rows: readonly StreamConsoleRow[]; loading?: boolean }) {
+function SystemHealthSummaryStrip({
+  rows,
+  loading,
+  selectedFilter = null,
+  onSelectFilter,
+}: {
+  rows: readonly StreamConsoleRow[]
+  loading?: boolean
+  selectedFilter?: StreamsOperationalFilter | null
+  onSelectFilter?: (filter: StreamsOperationalFilter | null) => void
+}) {
   if (loading) return <div className="h-12 animate-pulse rounded-xl bg-slate-200/60 dark:bg-gdc-elevated" aria-hidden />
 
-  const { noData, lowVolume, checkpointLag, destFailure, deliveryRetry, disabled } = computeHealthSummaryItems(rows)
+  const { noData, lowVolume, checkpointLag, destFailure, deliveryRetry, disabled, schemaDrift } = computeHealthSummaryItems(rows)
 
-  const items = [
-    { label: 'No Data',          count: noData,        tone: noData > 0 ? 'warning' : 'ok' as const },
-    { label: 'Low Volume',       count: lowVolume,      tone: lowVolume > 0 ? 'warning' : 'ok' as const },
-    { label: 'Checkpoint Lag',   count: checkpointLag,  tone: checkpointLag > 0 ? 'warning' : 'ok' as const },
-    { label: 'Dest. Failure',    count: destFailure,    tone: destFailure > 0 ? 'critical' : 'ok' as const },
-    { label: 'Delivery Retry',   count: deliveryRetry,  tone: deliveryRetry > 0 ? 'warning' : 'ok' as const },
-    { label: 'Disabled',         count: disabled,       tone: 'neutral' as const },
+  const items: Array<{
+    label: string
+    count: number
+    tone: 'warning' | 'critical' | 'ok' | 'neutral'
+    filterKey?: StreamsOperationalFilter
+    testId?: string
+  }> = [
+    { label: 'No Data', count: noData, tone: noData > 0 ? 'warning' : 'ok', filterKey: 'no-data', testId: 'health-summary-no-data' },
+    { label: 'Low Volume', count: lowVolume, tone: lowVolume > 0 ? 'warning' : 'ok', filterKey: 'low-volume', testId: 'health-summary-low-volume' },
+    { label: 'Schema Drift', count: schemaDrift, tone: schemaDrift > 0 ? 'warning' : 'ok', filterKey: 'schema-drift', testId: 'health-summary-schema-drift' },
+    { label: 'Checkpoint Lag', count: checkpointLag, tone: checkpointLag > 0 ? 'warning' : 'ok' },
+    { label: 'Dest. Failure', count: destFailure, tone: destFailure > 0 ? 'critical' : 'ok' },
+    { label: 'Delivery Retry', count: deliveryRetry, tone: deliveryRetry > 0 ? 'warning' : 'ok' },
+    { label: 'Disabled', count: disabled, tone: 'neutral' },
   ]
 
   return (
     <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200/80 bg-white px-4 py-3 shadow-sm dark:border-gdc-border dark:bg-gdc-card" data-testid="health-summary-strip">
-      {items.map(({ label, count, tone }) => {
-        const active = count > 0
-        const stripCls = tone === 'critical' && active ? 'border-red-500/30 bg-red-500/[0.06] text-red-700 dark:text-red-300'
+      {items.map(({ label, count, tone, filterKey, testId }) => {
+        const selected = filterKey != null && selectedFilter === filterKey
+        const active = count > 0 || selected
+        const stripCls = selected
+          ? 'border-violet-500/50 bg-violet-500/15 text-violet-200 ring-1 ring-violet-500/40'
+          : tone === 'critical' && active ? 'border-red-500/30 bg-red-500/[0.06] text-red-700 dark:text-red-300'
           : tone === 'warning' && active ? 'border-amber-500/30 bg-amber-500/[0.06] text-amber-700 dark:text-amber-300'
           : 'border-slate-200/60 bg-slate-50/50 text-slate-600 dark:border-gdc-border dark:bg-gdc-elevated/20 dark:text-gdc-muted'
-        const dotCls = tone === 'critical' && active ? 'bg-red-500'
+        const dotCls = selected ? 'bg-violet-400'
+          : tone === 'critical' && active ? 'bg-red-500'
           : tone === 'warning' && active ? 'bg-amber-500'
           : tone === 'neutral' ? 'bg-slate-400'
           : 'bg-emerald-500'
-        const countCls = tone === 'critical' && active ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
+        const countCls = selected ? 'bg-violet-500/25 text-violet-100'
+          : tone === 'critical' && active ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'
           : tone === 'warning' && active ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
           : 'bg-slate-100 text-slate-600 dark:bg-gdc-elevated dark:text-gdc-muted'
-        return (
-          <div key={label} className={cn('flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium', stripCls)}>
+        const interactive = filterKey != null && onSelectFilter != null
+        const sharedClass = cn('flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium', stripCls, interactive && 'cursor-pointer transition hover:brightness-110')
+        const body = (
+          <>
             <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dotCls)} aria-hidden />
             {label}
             <span className={cn('min-w-[1.25rem] rounded px-1 text-center text-[11px] font-bold tabular-nums', countCls)}>{count}</span>
+          </>
+        )
+        if (interactive) {
+          return (
+            <button
+              key={label}
+              type="button"
+              className={sharedClass}
+              data-testid={testId}
+              aria-pressed={selected}
+              onClick={() => onSelectFilter(selected ? null : filterKey)}
+            >
+              {body}
+            </button>
+          )
+        }
+        return (
+          <div key={label} className={sharedClass} data-testid={testId}>
+            {body}
           </div>
         )
       })}
@@ -824,6 +874,10 @@ export function StreamsConsole() {
   const [quickFilter, setQuickFilter] = useState<StreamsQuickFilter>('all')
   const [groupFilter, setGroupFilter] = useState('all')
   const connectorFilter = useMemo(() => parseConnectorFilterFromSearch(location.search), [location.search])
+  const operationalFilter = useMemo(
+    () => parseStreamsOperationalFilterFromSearch(location.search),
+    [location.search],
+  )
 
   const connectorFilterLabel = useMemo(() => {
     if (!connectorFilter) return null
@@ -841,6 +895,24 @@ export function StreamsConsole() {
     const qs = params.toString()
     navigate(qs ? `/streams?${qs}` : '/streams')
   }, [location.search, navigate])
+
+  const setOperationalFilter = useCallback(
+    (next: StreamsOperationalFilter | null) => {
+      const params = new URLSearchParams(location.search)
+      if (next) params.set('filter', next)
+      else params.delete('filter')
+      const qs = params.toString()
+      navigate(qs ? `/streams?${qs}` : '/streams')
+    },
+    [location.search, navigate],
+  )
+
+  const clearOperationalFilter = useCallback(() => setOperationalFilter(null), [setOperationalFilter])
+
+  const operationalFilterStreamIds = useMemo(() => {
+    if (!operationalFilter || !operationalSnapshot?.streams) return null
+    return streamIdsMatchingOperationalFilter(operationalSnapshot.streams, operationalFilter)
+  }, [operationalFilter, operationalSnapshot])
   const destinationLabelsByStreamId = useMemo(
     () => destinationLabelsByStreamIdFromSnapshot(operationalSnapshot?.routes),
     [operationalSnapshot],
@@ -1006,8 +1078,19 @@ export function StreamsConsole() {
         groupFilter,
         connectorFilter,
         destinationLabelsByStreamId,
+        operationalFilter,
+        operationalFilterStreamIds,
       }),
-    [displayRows, searchQuery, quickFilter, groupFilter, connectorFilter, destinationLabelsByStreamId],
+    [
+      displayRows,
+      searchQuery,
+      quickFilter,
+      groupFilter,
+      connectorFilter,
+      destinationLabelsByStreamId,
+      operationalFilter,
+      operationalFilterStreamIds,
+    ],
   )
 
   const productGroups = useMemo(() => {
@@ -1025,7 +1108,11 @@ export function StreamsConsole() {
   const operationsSummary = useMemo(() => computeStreamOperationsSummary(displayRows), [displayRows])
 
   const filtersActive =
-    searchQuery.trim().length > 0 || quickFilter !== 'all' || groupFilter !== 'all' || connectorFilter != null
+    searchQuery.trim().length > 0 ||
+    quickFilter !== 'all' ||
+    groupFilter !== 'all' ||
+    connectorFilter != null ||
+    operationalFilter != null
 
   useEffect(() => {
     const label = new URLSearchParams(location.search).get('expand_group')?.trim()
@@ -1226,7 +1313,12 @@ export function StreamsConsole() {
       <OverallHealthBeacon kpi={streamsPageKpi} loading={streamsLoading && displayRows.length === 0} />
 
       {/* System Health Summary Strip */}
-      <SystemHealthSummaryStrip rows={displayRows} loading={streamsLoading && displayRows.length === 0} />
+      <SystemHealthSummaryStrip
+        rows={displayRows}
+        loading={streamsLoading && displayRows.length === 0}
+        selectedFilter={operationalFilter}
+        onSelectFilter={setOperationalFilter}
+      />
 
       <StreamsGroupKpiStrip kpi={streamsPageKpi} loading={streamsLoading && displayRows.length === 0} />
 
@@ -1249,6 +1341,8 @@ export function StreamsConsole() {
         connectorFilter={connectorFilter}
         connectorFilterLabel={connectorFilterLabel}
         onClearConnectorFilter={clearConnectorFilter}
+        operationalFilter={operationalFilter}
+        onClearOperationalFilter={clearOperationalFilter}
         timeRange={timeRange}
         onClearTimeRange={() => handleTimeRangeChange('1h')}
         timeRangeIsDefault={timeRange === '1h'}
@@ -1547,7 +1641,11 @@ export function StreamsConsole() {
                                         <StreamSeverityIcon row={row} metricsWindow={timeRange} />
                                         {/^\d+$/.test(row.id) ? (
                                           <Link
-                                            to={streamRuntimePath(row.id)}
+                                            to={
+                                              operationalFilter === 'schema-drift'
+                                                ? streamRuntimePath(row.id, { tab: 'schema' })
+                                                : streamRuntimePath(row.id)
+                                            }
                                             onClick={(e) => e.stopPropagation()}
                                             className="truncate text-[13px] font-semibold text-slate-900 hover:text-violet-600 hover:underline dark:text-slate-100 dark:hover:text-violet-400"
                                             title={`Open Runtime: ${row.name}`}

@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from app.protection.models import POLICY_ACTION_AUDIT_ONLY, POLICY_ACTION_QUARANTINE
+from app.protection.models import (
+    POLICY_ACTION_AUDIT_ONLY,
+    POLICY_ACTION_BLOCK,
+    POLICY_ACTION_QUARANTINE,
+    POLICY_ACTION_REQUIRE_REVIEW,
+)
 from app.protection.policy_engine import PolicyBatchResult
 from app.quarantine.policy_integration import matched_quarantine_evaluations
 from app.route_policy.config import PolicyDecision, RoutePolicyConfig
@@ -44,6 +49,24 @@ def merge_route_policy_decision(
     if audit_matches:
         candidates.append("audit")
         reasons.append("matched_policy_audit")
+
+    block_matches = [
+        item
+        for item in policy_batch_result.evaluations
+        if item.matched and str(item.action_type) == POLICY_ACTION_BLOCK
+    ]
+    if block_matches:
+        candidates.append("block")
+        reasons.append("matched_policy_block")
+
+    review_matches = [
+        item
+        for item in policy_batch_result.evaluations
+        if item.matched and str(item.action_type) == POLICY_ACTION_REQUIRE_REVIEW
+    ]
+    if review_matches:
+        candidates.append("require_review")
+        reasons.append("matched_policy_require_review")
 
     override = config.override_delivery_behavior
     if override == "block":

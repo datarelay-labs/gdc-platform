@@ -214,13 +214,6 @@ Action
 
 --------------------------------------------------
 
-⚙️ Data Processing
-
-- Mapping
-- Enrichment
-
---------------------------------------------------
-
 🚚 Delivery
 
 - Destinations
@@ -228,6 +221,14 @@ Action
 --------------------------------------------------
 
 🔧 Administration
+
+--------------------------------------------------
+
+Mapping, Enrichment, Route Processing, Routes console, and Governance
+are not primary sidebar items.
+
+They live inside Stream Wizard / Stream Edit (Route Processing)
+and RBAC-gated deep links.
 
 ==================================================
 6. Navigation Anti-Pattern
@@ -1041,25 +1042,22 @@ Route 단위 처리로 인식한다.
 26. Navigation Update
 ==================================================
 
-Data Processing
+Route Processing is not a primary sidebar menu.
 
-메뉴는
-
-Route Processing 개념을 포함한다.
+Transform, Protection, Classification, Policy, and Delivery
+are configured inside Stream Wizard / Stream Edit Route Processing.
 
 --------------------------------------------------
 
-Transform
+Primary sidebar remains:
 
-Protection
+Dashboard
 
-Classification
+Data Sources (Connectors, Streams)
 
-Policy
+Delivery (Destinations)
 
-는
-
-Route Processing 영역으로 확장될 수 있다.
+Administration
 
 ==================================================
 27. Stream And Route Model

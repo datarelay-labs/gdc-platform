@@ -27,9 +27,9 @@ Use this checklist before exposing Data Relay to production traffic.
 
 ## Email & notifications
 
-- [ ] **SMTP_ENABLED** set according to deployment policy (`false` until SMTP backend is configured)
-- [ ] Governance notification channels configured under **Governance → Notifications**
-- [ ] Email recipients verified in non-production first
+- [ ] **SMTP_ENABLED** / **SMTP_HOST** set when email notifications are required (`false` or empty host skips send; does not affect Stream runtime)
+- [ ] **SMTP_FROM** and recipients verified under **Governance → Notifications** (and Administration alert `email_to` if used)
+- [ ] Email send verified in non-production first; Slack notifications remain planned
 
 ---
 

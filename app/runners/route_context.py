@@ -8,8 +8,11 @@ from typing import Any, Literal
 from app.protection.engine import ProtectBatchResult
 from app.route_protection.config import RouteProtectionConfig
 from app.route_classification.config import RouteClassificationConfig, RouteClassificationResult
+from app.route_classification.metrics import RouteClassificationMetricsResult
 from app.route_policy.config import RoutePolicyConfig, RoutePolicyResult
 from app.route_delivery.config import RouteDeliveryResult
+from app.route_protection.metrics import RouteProtectionResult
+from app.route_transform.metrics import RouteTransformResult
 
 
 def dual_read(route_value: Any, stream_value: Any) -> Any:
@@ -57,7 +60,10 @@ class RouteProcessingState:
     current_events: list[dict[str, Any]] = field(default_factory=list)
     stage_timeline: list[dict[str, Any]] = field(default_factory=list)
     errors: list[dict[str, Any]] = field(default_factory=list)
+    transform_result: RouteTransformResult | None = None
+    protection_result: RouteProtectionResult | None = None
     classification_result: RouteClassificationResult | None = None
+    classification_metrics: RouteClassificationMetricsResult | None = None
     policy_result: RoutePolicyResult | None = None
 
 
@@ -136,12 +142,28 @@ class RouteProcessingMetrics:
     route_transform_count: int = 0
     route_transform_duration_ms: int = 0
     route_transform_fallback_count: int = 0
+    route_transform_attempt_count: int = 0
+    route_transform_success_count: int = 0
+    route_transform_failure_count: int = 0
+    route_transform_skipped_count: int = 0
+    route_mapping_operations_applied: int = 0
+    route_enrichment_operations_applied: int = 0
     route_protection_count: int = 0
     route_protection_duration_ms: int = 0
+    route_protection_attempt_count: int = 0
+    route_protection_success_count: int = 0
+    route_protection_failure_count: int = 0
+    route_protection_skipped_count: int = 0
+    route_protection_operations_applied: int = 0
     route_auto_protect_count: int = 0
     route_classification_count: int = 0
     route_classification_duration_ms: int = 0
     route_classification_override_count: int = 0
+    route_classification_attempt_count: int = 0
+    route_classification_success_count: int = 0
+    route_classification_failure_count: int = 0
+    route_classification_skipped_count: int = 0
+    route_classification_operations_applied: int = 0
     route_policy_count: int = 0
     route_policy_duration_ms: int = 0
     route_policy_allow_count: int = 0
@@ -164,11 +186,18 @@ class RouteStageResult:
 
     route_id: int
     events: list[dict[str, Any]] = field(default_factory=list)
+    # Post-transform / pre-protection processing state. Stream checkpoint must
+    # persist this source state, never a route's protected delivery copy.
+    checkpoint_source_events: list[dict[str, Any]] = field(default_factory=list)
     modified: bool = False
     stage_timeline: list[dict[str, Any]] = field(default_factory=list)
+    transform_result: RouteTransformResult | None = None
+    transform_duration_ms: int = 0
+    protection_result: RouteProtectionResult | None = None
     protection_duration_ms: int = 0
     auto_protect_count: int = 0
     classification_result: RouteClassificationResult | None = None
+    classification_metrics: RouteClassificationMetricsResult | None = None
     classification_duration_ms: int = 0
     policy_result: RoutePolicyResult | None = None
     policy_duration_ms: int = 0

@@ -170,7 +170,7 @@ def test_invalid_action_still_rejected(db_session: Session) -> None:
             name="Bad",
             enabled=True,
             condition_json={"sensitivity_class": "secret"},
-            action_type="block",
+            action_type="invalid_action",
         )
 
 

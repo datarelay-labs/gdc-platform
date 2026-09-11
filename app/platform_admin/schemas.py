@@ -374,7 +374,7 @@ class AlertSettingsRead(BaseModel):
     )
     notification_delivery: dict[str, str] = Field(
         default_factory=dict,
-        description="webhook implemented; slack/email remain planned placeholders.",
+        description="webhook implemented; slack planned; email uses platform SMTP when SMTP_ENABLED.",
     )
     cooldown_seconds: int = 600
     monitor_enabled: bool = True

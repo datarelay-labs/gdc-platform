@@ -37,6 +37,9 @@ export function loadLabEnv(): LabEnv {
     syslogPort: Number(process.env.GDC_E2E_SYSLOG_COLLECTOR_PORT || 15614),
     syslogTlsPort: Number(process.env.GDC_E2E_SYSLOG_TLS_PORT || 16614),
     namePrefix: process.env.GDC_E2E_NAME_PREFIX || '[FULL E2E]',
+    s3Prefix: (process.env.GDC_E2E_S3_PREFIX || 'full-e2e/').replace(/\/*$/, '/'),
+    collectorChannel: (process.env.GDC_E2E_COLLECTOR_CHANNEL || '').trim(),
+    sftpDirectory: process.env.GDC_E2E_SFTP_DIRECTORY || '/upload/full-e2e',
     routeProcessingEnabled,
     requireAuth: (process.env.REQUIRE_AUTH || 'false').toLowerCase() === 'true',
     minioEndpoint: process.env.SOURCE_E2E_MINIO_ENDPOINT || 'http://127.0.0.1:59000',
@@ -177,6 +180,11 @@ export class FixtureClient {
 
   async resetCollectors(): Promise<void> {
     this.assertRequestAlive()
+    // Parallel workers must not wipe a shared collector. Isolation is by
+    // destination collect path / syslog app_name + baseline/delta reads.
+    if (this.env.collectorChannel) {
+      return
+    }
     const wh = await this.request.post(`${this.env.webhookCollectorUrl}/reset`)
     if (!wh.ok()) throw new Error(`webhook collector reset failed: ${wh.status()}`)
     const sy = await this.request.post(`${this.env.syslogCollectorApiUrl}/reset`)
@@ -266,15 +274,57 @@ export class FixtureClient {
   }
 
   /**
-   * Stable identity for a collector row so scenario assertions can ignore pre-existing
-   * lab history that shares static full-e2e-corr-* correlation IDs.
+   * Keep only this worker's collector rows. Webhook destinations post to
+   * /collect/<channel>; syslog app_name is the same token.
    */
-  static collectorMessageKey(msg: unknown): string {
-    const row = msg as { id?: unknown; timestamp?: unknown; correlation_id?: unknown }
-    if (row?.id !== undefined && row?.id !== null && String(row.id).length > 0) {
-      return `id:${String(row.id)}`
+  private filterByCollectorChannel(messages: unknown[]): unknown[] {
+    const channel = this.env.collectorChannel
+    if (!channel) return messages
+    return messages.filter((msg) => FixtureClient.messageBelongsToChannel(msg, channel))
+  }
+
+  static messageBelongsToChannel(msg: unknown, channel: string): boolean {
+    if (!channel) return true
+    const row = msg as { path?: unknown; raw_message?: unknown; body?: unknown; raw_body?: unknown }
+    const path = String(row?.path ?? '')
+    if (path.includes(`/${channel}`) || path.endsWith(channel)) return true
+    const raw = `${String(row?.raw_message ?? '')} ${String(row?.raw_body ?? '')}`
+    if (raw.includes(channel)) return true
+    try {
+      const bodyText = typeof row?.body === 'string' ? row.body : JSON.stringify(row?.body ?? '')
+      if (bodyText.includes(channel)) return true
+    } catch {
+      /* ignore */
     }
-    return `fallback:${String(row?.timestamp ?? '')}:${String(row?.correlation_id ?? '')}:${JSON.stringify(msg).slice(0, 240)}`
+    return false
+  }
+
+  static collectorMessageKey(msg: unknown): string {
+    const row = msg as {
+      id?: unknown
+      timestamp?: unknown
+      correlation_id?: unknown
+      protocol?: unknown
+      path?: unknown
+      raw_message?: unknown
+      raw_body?: unknown
+      body?: unknown
+    }
+    const idPart = row?.id !== undefined && row?.id !== null ? String(row.id) : ''
+    const ts = String(row?.timestamp ?? '')
+    const cid = String(row?.correlation_id ?? '')
+    const proto = String(row?.protocol ?? '')
+    const path = String(row?.path ?? '')
+    const raw = String(row?.raw_message ?? row?.raw_body ?? '')
+    let bodyBit = ''
+    try {
+      bodyBit = typeof row?.body === 'string' ? row.body : JSON.stringify(row?.body ?? '')
+    } catch {
+      bodyBit = ''
+    }
+    // Lab collectors cap in-memory rows and used to reuse id=len(MESSAGES).
+    // Identity must survive that collision or waitForNew treats fresh hits as baseline.
+    return `id:${idPart}|ts:${ts}|cid:${cid}|p:${proto}|path:${path}|fp:${raw.slice(0, 240)}|b:${bodyBit.slice(0, 120)}`
   }
 
   async listByCorrelation(
@@ -297,6 +347,8 @@ export class FixtureClient {
         out.push(msg)
       }
     }
+    // Correlation IDs are per-scenario unique. Do not drop syslog/webhook hits
+    // that lack the worker channel token (APP-NAME is not always in raw payload).
     return out
   }
 

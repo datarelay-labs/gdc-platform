@@ -22,10 +22,27 @@ from urllib.parse import parse_qs, urlparse
 LOCK = threading.Lock()
 MESSAGES: list[dict[str, Any]] = []
 MAX_MESSAGES = 5000
+NEXT_ID = 0
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def append_message(entry: dict[str, Any]) -> dict[str, Any]:
+    """Assign a never-reused id, then cap the in-memory ring buffer.
+
+    Callers must hold LOCK. Reusing id=len(MESSAGES) after wrap made every new
+    row look like the baseline in waitForNew collector correlation.
+    """
+    global NEXT_ID
+    NEXT_ID += 1
+    entry["id"] = NEXT_ID
+    MESSAGES.append(entry)
+    overflow = len(MESSAGES) - MAX_MESSAGES
+    if overflow > 0:
+        del MESSAGES[:overflow]
+    return entry
 
 
 def _extract_correlation(headers: dict[str, str], body: Any) -> str | None:
@@ -115,7 +132,7 @@ class Handler(BaseHTTPRequestHandler):
             body = raw.decode("utf-8", errors="replace")
 
         entry = {
-            "id": len(MESSAGES) + 1,
+            "id": 0,
             "timestamp": _now(),
             "method": "POST",
             "path": parsed.path,
@@ -126,10 +143,7 @@ class Handler(BaseHTTPRequestHandler):
             "status_response": 200,
         }
         with LOCK:
-            MESSAGES.append(entry)
-            if len(MESSAGES) > MAX_MESSAGES:
-                del MESSAGES[: len(MESSAGES) - MAX_MESSAGES]
-            entry["id"] = len(MESSAGES)
+            append_message(entry)
 
         self._send(200, {"ok": True, "received_id": entry["id"], "correlation_id": entry["correlation_id"]})
 

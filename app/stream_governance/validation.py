@@ -82,6 +82,7 @@ def _normalize_override_record(
     field_path: str,
     seen_protection: set[tuple[str, int]],
     seen_classification: set[int],
+    seen_policy: set[int],
 ) -> dict[str, Any]:
     enabled = bool(raw.get("enabled", True))
     route_id_raw = raw.get("route_id")
@@ -102,11 +103,13 @@ def _normalize_override_record(
     has_protection_intent = raw_protection is not None and str(raw_protection).strip() != ""
     classification_level = _normalize_classification_level(raw.get("classification_level"), enabled=enabled)
     has_classification_intent = classification_level is not None
+    delivery_behavior = _normalize_delivery_behavior(raw.get("delivery_behavior"))
+    has_policy_intent = delivery_behavior is not None
 
-    if enabled and not has_protection_intent and not has_classification_intent:
+    if enabled and not has_protection_intent and not has_classification_intent and not has_policy_intent:
         raise StreamGovernanceValidationError(
             "ROUTE_OVERRIDE_MISSING_ACTION",
-            "protection_action or classification_level is required when override is enabled",
+            "protection_action, classification_level, or delivery_behavior is required when override is enabled",
         )
 
     protection_action: str | None = None
@@ -130,8 +133,13 @@ def _normalize_override_record(
         seen_classification.add(route_id)
         raw_path = str(raw.get("field_path") or field_path or "").strip()
         path = normalize_field_path(raw_path) if raw_path else None
-
-    delivery_behavior = _normalize_delivery_behavior(raw.get("delivery_behavior"))
+    elif has_policy_intent:
+        if route_id in seen_policy:
+            raise StreamGovernanceValidationError(
+                "INVALID_ROUTE_OVERRIDE_DUPLICATE",
+                f"duplicate policy override for route_id={route_id}",
+            )
+        seen_policy.add(route_id)
 
     override_key = str(raw.get("override_key") or "").strip() or f"ovr-{uuid.uuid4().hex[:12]}"
 
@@ -154,6 +162,7 @@ def flatten_route_overrides(
 
     seen_protection: set[tuple[str, int]] = set()
     seen_classification: set[int] = set()
+    seen_policy: set[int] = set()
     normalized: list[dict[str, Any]] = []
 
     for item in flat_overrides or []:
@@ -163,7 +172,13 @@ def flatten_route_overrides(
                 "route_overrides entries must be objects",
             )
         normalized.append(
-            _normalize_override_record(item, field_path="", seen_protection=seen_protection, seen_classification=seen_classification)
+            _normalize_override_record(
+                item,
+                field_path="",
+                seen_protection=seen_protection,
+                seen_classification=seen_classification,
+                seen_policy=seen_policy,
+            )
         )
 
     for rule in rules or []:
@@ -190,6 +205,7 @@ def flatten_route_overrides(
                     field_path=rule_path,
                     seen_protection=seen_protection,
                     seen_classification=seen_classification,
+                    seen_policy=seen_policy,
                 )
             )
 

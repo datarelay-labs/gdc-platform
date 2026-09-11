@@ -1,9 +1,6 @@
 import { evaluateUnionFieldSuggestion } from './evaluateUnionFieldSuggestion'
+import type { UnionSchemaField } from './unionSchema'
 
-export function isUnionFieldSensitive(
-  fieldPath: string,
-  sampleValues?: readonly unknown[],
-  fieldType?: string,
-): boolean {
-  return evaluateUnionFieldSuggestion(fieldPath, fieldType, sampleValues).sensitive
+export function isUnionFieldSensitive(field: UnionSchemaField | null | undefined): boolean {
+  return evaluateUnionFieldSuggestion(field).sensitive
 }

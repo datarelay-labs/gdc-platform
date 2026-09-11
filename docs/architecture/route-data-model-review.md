@@ -1,6 +1,9 @@
 # Route Data Model Review
 
-**Status:** Architecture review only — no code, implementation, or migrations  
+**Status:** SUPERSEDED (historical architecture review)  
+**Superseded By:** [`specs/091–096`](../../specs/091-route-processing-architecture/spec.md), Runtime models
+
+Architecture review only — no code, implementation, or migrations  
 **Date:** 2026-06-15  
 **Scope:** Current Route DB model (M13.1–M13.3) vs M13.4 (Classification), M13.5 (Policy), M13.6 (Delivery)  
 **Inputs:**

@@ -1,6 +1,11 @@
 # Legacy Design Documents Archive
 
+**Status:** ARCHIVE_CANDIDATE  
+**Superseded By:** [`docs/architecture/source-of-truth-index.md`](../../architecture/source-of-truth-index.md)
+
 This directory holds superseded Source of Truth design documents moved during SoT replacement.
+
+M13 / Destination First snapshot audits live in [`docs/archive/historical-audits/`](../historical-audits/).
 
 ## 2026-06-14 replacement
 

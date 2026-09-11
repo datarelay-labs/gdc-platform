@@ -30,7 +30,7 @@ wait_compose_healthy() {
 }
 
 docker compose -p "$COMPOSE_PROJECT_NAME" -f "$GDC_TEST_COMPOSE_FILE" up -d \
-  postgres-test postgres-ontology-test wiremock-test webhook-receiver-test syslog-test
+  postgres-test postgres-ontology-test wiremock-test toxiproxy-test webhook-receiver-test syslog-test
 
 echo "Waiting for PostgreSQL test services..."
 wait_compose_healthy "$PG_TEST_CONTAINER"
@@ -67,5 +67,8 @@ echo "Test stack up."
 echo "  TEST_DATABASE_URL=$TEST_DATABASE_URL"
 echo "  ONTOLOGY_TEST_DATABASE_URL=$ONTOLOGY_TEST_DATABASE_URL"
 echo "  WIREMOCK_BASE_URL=$WIREMOCK_BASE_URL"
+echo "  TOXIPROXY_API_URL=$TOXIPROXY_API_URL"
+echo "  TOXIPROXY_SOURCE_BASE_URL=$TOXIPROXY_SOURCE_BASE_URL"
+echo "  TOXIPROXY_DEST_BASE_URL=$TOXIPROXY_DEST_BASE_URL"
 echo "  Webhook echo (optional): http://127.0.0.1:18091"
 echo "  Syslog container (optional): 127.0.0.1:15514 tcp/udp"

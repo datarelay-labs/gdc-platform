@@ -16,6 +16,11 @@ Unified lab + Playwright framework for connector → runtime → collector deliv
 # Shard optional
 GDC_E2E_SHARD=authentication ./e2e/run-full-e2e-lab.sh all-matrix --route-processing=off
 
+# Cross-Product Full Matrix — bounded parallel shards (default 2 workers)
+./e2e/cross-product/run-parallel-shards.sh --workers 2
+./e2e/cross-product/run-parallel-shards.sh --workers 2 --resume
+./e2e/cross-product/run-all-shards.sh   # sequential (workers=1)
+
 # Merge + validate execution completeness
 ./e2e/run-full-e2e-lab.sh merge-results
 ./e2e/run-full-e2e-lab.sh validate-results
@@ -175,7 +180,7 @@ npm run release-gate:build-baseline -- --run-id <latest-pass-run>
 
 ## Notes
 
-- Product `GDC_ROUTE_PROCESSING_ENABLED` default is **not** changed; only the lab uvicorn process uses the env file.
+- Product `GDC_ROUTE_PROCESSING_ENABLED` default is **ON**; lab shards still pin `.env.route-on` / `.env.route-off` explicitly.
 - API-seeded paths do not replace required Browser E2E coverage.
 - Phase 1 mismatches remain `NOT_IMPLEMENTED` / `KNOWN_PRODUCT_GAP` — product code is out of scope.
 - Outcomes: `PASS` | `FAIL` | `BLOCKED` | `NOT_APPLICABLE` | `NOT_IMPLEMENTED` | `KNOWN_PRODUCT_GAP` (no silent skips).

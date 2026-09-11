@@ -1,6 +1,10 @@
 # Release Readiness Audit — Enterprise Data Control Gateway OSS v1.0 RC
 
-**Audit date:** 2026-06-06  
+**Status:** HISTORICAL RC AUDIT (2026-06-06) — do not use §7 as the live wizard workflow, and do not treat §5 / §11 SMTP mock items as current product truth.
+**Current wizard:** Connect → Sample & Record Selection → Destinations → Route Processing → Deploy.
+**Current SMTP:** Operational email delivery is implemented (`NotificationService` → `SmtpEmailSender`). Slack remains planned.
+
+**Audit date:** 2026-06-06
 **Scope:** M20.4 Open Source Release Readiness (cleanup, validation, documentation — no new engine features)
 
 ## Executive summary
@@ -80,7 +84,7 @@ All core OSS paths verified present: auth, streams, mappings, enrichments, desti
 | `ENABLE_DEV_VALIDATION_LAB` | `false` | WireMock/MinIO lab |
 | `GDC_*_ENABLED` (protection, classification, etc.) | `true` | Core runtime pipeline |
 | `REQUIRE_AUTH` | `true` (.env.example) | Login gate |
-| `SMTP_ENABLED` | `false` | Governance email channel availability |
+| `SMTP_ENABLED` | `false` | Governance email channel availability (audit-time default; delivery is implemented as of `18f4ce3`) |
 | `WEBHOOK_TIMEOUT` | `10` | Governance webhook delivery timeout (seconds) |
 
 No hidden runtime feature flags discovered that bypass OSS gates.
@@ -91,7 +95,7 @@ No hidden runtime feature flags discovered that bypass OSS gates.
 
 | Area | Location | Risk |
 |------|----------|------|
-| `MockEmailSender` / `MockWebhookSender` | `app/governance_notifications/` | Test/MVP default; production uses `HttpWebhookSender` when `APP_ENV=production` |
+| `MockEmailSender` / `MockWebhookSender` | `app/governance_notifications/` | Audit-time note. Tests still use mocks; production email uses `SmtpEmailSender` (startup); production webhooks use `HttpWebhookSender` when `APP_ENV=production`. |
 | `gdc_pytest` catalog | `docker-compose.test.yml` | Isolated from production `gdc` catalog |
 | Dev fixtures | `frontend/public/dev-fixtures/` | Not exposed in OSS production bundle |
 
@@ -111,7 +115,7 @@ No hidden runtime feature flags discovered that bypass OSS gates.
 
 ## 7. Legacy wizard traces
 
-The stream wizard uses a unified step model (`connect → mapping → destination → review`). Legacy sub-step keys remain in `wizard-state.ts` for persisted JSON normalization — **required for upgrade safety**, not user-facing legacy UI.
+The live stream wizard is Destination First (`connect → sample → destinations → route-processing → deploy`). Legacy sub-step keys (including older mapping/review traces) remain in `wizard-state.ts` for persisted JSON normalization — **required for upgrade safety**, not user-facing UI.
 
 ---
 
@@ -152,5 +156,5 @@ The stream wizard uses a unified step model (`connect → mapping → destinatio
 ## 11. Recommended post-RC (non-blocking)
 
 1. Remove deprecated `SIDEBAR_STRUCTURE` after test migration completes.
-2. Wire `SMTP_ENABLED` to a real SMTP backend when operators require email delivery beyond mock.
+2. ~~Wire `SMTP_ENABLED` to a real SMTP backend beyond mock.~~ **Superseded** — SMTP delivery implemented (`18f4ce3`). Slack remains planned.
 3. Add E2E install smoke in CI using `docker compose up` (optional automation).

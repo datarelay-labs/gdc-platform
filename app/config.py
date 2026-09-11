@@ -202,13 +202,20 @@ class Settings(BaseSettings):
     GDC_CLASSIFICATION_ENABLED: bool = True
     GDC_IDENTITY_VAULT_HASH_SALT: str = ""
 
-    # M13.1 Route Processing Foundation — per-route orchestration skeleton (default off).
-    # Operator UI and per-route CRUD APIs are deferred for OSS v1; see
-    # docs/architecture/m13-route-processing-ui-deferral.md
-    GDC_ROUTE_PROCESSING_ENABLED: bool = False
+    # Route Processing runtime — Transform → Protection → Classification → Policy → Delivery.
+    # Default ON. Set false to use the legacy stream-scoped path (rollback / compatibility).
+    GDC_ROUTE_PROCESSING_ENABLED: bool = True
 
-    # Governance notifications (M20.2) — platform-level delivery settings.
+    # Governance / operational notifications (M20.2) — platform-level SMTP.
     SMTP_ENABLED: bool = False
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = ""
+    SMTP_STARTTLS: bool = True
+    SMTP_SSL: bool = False
+    SMTP_TIMEOUT: float = 10.0
     WEBHOOK_TIMEOUT: float = 10.0
 
     # When True, trust ``X-Forwarded-Proto`` / ``X-Forwarded-For`` from ``GDC_PROXY_FORWARD_TRUSTED_HOSTS``.
@@ -222,6 +229,13 @@ class Settings(BaseSettings):
 
         meta = apply_dev_validation_lab_env_defaults(self)
         object.__setattr__(self, "_dev_validation_lab_defaults_meta", meta)
+        return self
+
+    @model_validator(mode="after")
+    def _fail_closed_production_security(self) -> "Settings":
+        from app.production_security import validate_production_security_settings
+
+        validate_production_security_settings(self)
         return self
 
     @property

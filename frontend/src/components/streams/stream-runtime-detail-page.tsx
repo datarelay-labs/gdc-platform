@@ -86,6 +86,7 @@ import { buildFlowTimelineStages, StreamFlowTimeline } from './stream-flow-timel
 import { StreamRecentEventsPanel } from './stream-recent-events-panel'
 import { usePersonaMode } from '../../hooks/use-persona-mode'
 import { StreamGovernanceDrawer } from './stream-governance-drawer'
+import { SchemaDriftPanel } from './schema-drift-panel'
 import { schemaDriftPolicyLabelsFromStreamConfig } from '../../lib/stream-schema-drift-policy'
 import { StreamMonitoringObservabilitySection } from './stream-monitoring-observability-section'
 import { StreamDetailTabNav, useStreamDetailTab } from './stream-detail-tab-nav'
@@ -1279,6 +1280,13 @@ export function StreamRuntimeDetailPage() {
               Open mapping
             </Link>
           </div>
+          {backendStreamId != null ? (
+            <SchemaDriftPanel
+              streamId={backendStreamId}
+              canOperate={canRuntimeControl}
+              initialSummary={governanceSnapshot?.schemaDrift}
+            />
+          ) : null}
           <StreamDetailDeliveryPanel
             streamId={streamId}
             connectorName={connectorDisplayName ?? data.connectorName}

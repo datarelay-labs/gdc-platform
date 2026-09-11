@@ -59,6 +59,45 @@ def _count_delivery_behavior_overrides(
     return count
 
 
+def _policy_condition_key(row: Any) -> tuple[str, str]:
+    raw = getattr(row, "condition_json", {}) or {}
+    cond = raw if isinstance(raw, dict) else {}
+    level = str(cond.get("classification_level") or "").strip().upper()
+    sensitivity = str(cond.get("sensitivity_class") or "").strip().lower()
+    return (level, sensitivity)
+
+
+def _merge_stream_and_route_policy_rules(
+    stream_rules: list[Any],
+    route_rules: list[Any],
+) -> tuple[list[RoutePolicyRuleEntry], PersistedSource]:
+    """Route rules overlay matching stream conditions; unmatched stream rules stay inherited."""
+
+    if not route_rules and not stream_rules:
+        return [], "empty"
+    if not route_rules:
+        return [_rule_entry_from_row(row, source="stream") for row in stream_rules], "stream"
+    if not stream_rules:
+        return [_rule_entry_from_row(row, source="route") for row in route_rules], "route"
+
+    overlay = {_policy_condition_key(row): row for row in route_rules}
+    merged: list[RoutePolicyRuleEntry] = []
+    used_keys: set[tuple[str, str]] = set()
+    for stream_row in stream_rules:
+        key = _policy_condition_key(stream_row)
+        route_row = overlay.get(key)
+        if route_row is not None:
+            merged.append(_rule_entry_from_row(route_row, source="route"))
+            used_keys.add(key)
+        else:
+            merged.append(_rule_entry_from_row(stream_row, source="stream"))
+    for route_row in route_rules:
+        key = _policy_condition_key(route_row)
+        if key not in used_keys:
+            merged.append(_rule_entry_from_row(route_row, source="route"))
+    return merged, "route"
+
+
 def resolve_route_policy_config(
     *,
     route_id: int,
@@ -74,16 +113,7 @@ def resolve_route_policy_config(
     _ = stream_id
     route_rules = [r for r in (route_policy_rules or []) if bool(getattr(r, "enabled", True))]
     stream_rules = [r for r in (stream_policy_rules or []) if bool(getattr(r, "enabled", True))]
-
-    if route_rules:
-        persisted = [_rule_entry_from_row(row, source="route") for row in route_rules]
-        persisted_source: PersistedSource = "route"
-    elif stream_rules:
-        persisted = [_rule_entry_from_row(row, source="stream") for row in stream_rules]
-        persisted_source = "stream"
-    else:
-        persisted = []
-        persisted_source = "empty"
+    persisted, persisted_source = _merge_stream_and_route_policy_rules(stream_rules, route_rules)
 
     override_delivery_behavior = _extract_delivery_behavior(
         route_overrides,

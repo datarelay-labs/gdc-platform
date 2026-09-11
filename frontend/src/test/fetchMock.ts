@@ -42,6 +42,7 @@ export function assertPreviewOnlySafeUrls(mockCalls: unknown[][]): void {
       u.includes('/preview/mapping') ||
       u.includes('/preview/format') ||
       u.includes('/preview/route-delivery') ||
+      u.includes('/preview/sensitive-detection') ||
       u.includes('/format-preview')
     expect(allowed).toBe(true)
   }

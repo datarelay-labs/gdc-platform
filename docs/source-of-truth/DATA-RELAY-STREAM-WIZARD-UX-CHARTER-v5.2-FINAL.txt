@@ -91,7 +91,7 @@ Implementation boundaries must remain hidden.
 ==================================================
 FINAL WIZARD STRUCTURE
 
-The Stream Wizard consists of six major steps.
+The Stream Wizard consists of five major steps.
 
 1. Connect
 

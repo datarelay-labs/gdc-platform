@@ -150,6 +150,12 @@ def _fetch_postgres(
     sql_text: str,
     bind: tuple | dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
+    """Connect to the external source PostgreSQL and run ``sql_text`` in a read-only transaction.
+
+    Read-only is enforced at the PostgreSQL transaction level (``SET TRANSACTION READ ONLY``)
+    in the same transaction as the user query. Application/checkpoint DB sessions are untouched.
+    """
+
     sslmode = _ssl_mode_pg(ssl_mode)
     conn = None
     rows: list[Any] = []
@@ -165,6 +171,8 @@ def _fetch_postgres(
             options=f"-c statement_timeout={int(statement_ms)}",
         )
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            # Same transaction as the user query: SET TRANSACTION must run before any DML/SELECT work.
+            cur.execute("SET TRANSACTION READ ONLY")
             cur.execute(sql_text, bind)
             rows = cur.fetchall()
     except Exception as exc:
@@ -173,6 +181,10 @@ def _fetch_postgres(
         raise SourceFetchError(f"PostgreSQL query failed: {exc}") from exc
     finally:
         if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:  # pragma: no cover
+                pass
             try:
                 conn.close()
             except Exception:  # pragma: no cover

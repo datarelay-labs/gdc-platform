@@ -283,4 +283,45 @@ describe('wizard-draft-migration', () => {
       protectionAction: 'tokenize',
     })
   })
+
+  it('restores routeClassificationOverrides and dataPolicy from draft', () => {
+    const state = buildInitialState()
+    state.dataPolicy.defaultClassification = 'RESTRICTED'
+    state.dataPolicy.restrictedResponse = 'block'
+    state.dataProtection.routeClassificationOverrides = [
+      {
+        key: 'c1',
+        routeDraftKey: 'r1',
+        classificationLevel: 'CONFIDENTIAL',
+        enabled: true,
+      },
+    ]
+    saveWizardDraft(state, 'route_processing')
+    const loaded = parseWizardDraftV2(localStorage.getItem(WIZARD_DRAFT_KEY_V2) ?? '')
+    expect(loaded?.state.dataPolicy.defaultClassification).toBe('RESTRICTED')
+    expect(loaded?.state.dataPolicy.restrictedResponse).toBe('block')
+    expect(loaded?.state.dataProtection.routeClassificationOverrides).toEqual([
+      expect.objectContaining({
+        routeDraftKey: 'r1',
+        classificationLevel: 'CONFIDENTIAL',
+      }),
+    ])
+  })
+
+  it('migrates legacy Policy mask to Continue and keeps Protection Mask intact', () => {
+    const state = buildInitialState()
+    state.dataPolicy.confidentialResponse = 'mask' as never
+    state.dataProtection.intents = [
+      {
+        key: 'i1',
+        detectedField: '$.email',
+        protectionAction: 'mask_partial',
+        deliveryBehavior: 'continue',
+      },
+    ]
+    saveWizardDraft(state, 'route_processing')
+    const loaded = parseWizardDraftV2(localStorage.getItem(WIZARD_DRAFT_KEY_V2) ?? '')
+    expect(loaded?.state.dataPolicy.confidentialResponse).toBe('continue')
+    expect(loaded?.state.dataProtection.intents[0]?.protectionAction).toBe('mask_partial')
+  })
 })

@@ -53,7 +53,7 @@ export function parseResponseBody(raw: string): unknown | null {
   } catch {
     return {
       error_code: 'NON_JSON_RESPONSE',
-      message: raw.length > 600 ? `${raw.slice(0, 600)}…` : raw,
+      message: 'The service returned a non-JSON error response.',
     }
   }
 }
@@ -352,6 +352,9 @@ export async function requestJson<T>(path: string, init?: GdcJsonFetchInit): Pro
   const raw = await response.text()
   const body = parseResponseBody(raw)
   if (!response.ok) {
+    if (response.status >= 500 || (body !== null && typeof body === 'object' && !Array.isArray(body) && (body as { error_code?: unknown }).error_code === 'NON_JSON_RESPONSE')) {
+      console.warn('[gdc] request failed', path, response.status, raw.slice(0, 300))
+    }
     const errorCode = extractHttpErrorCode(body)
     if (isPasswordChangeRequiredCode(errorCode)) {
       markSessionRequiresPasswordChange()
@@ -361,7 +364,7 @@ export async function requestJson<T>(path: string, init?: GdcJsonFetchInit): Pro
           : 'You must change your password before using this resource.'
       throw new PasswordChangeRequiredError(message)
     }
-    throw new Error(formatHttpErrorBody(response.status, body ?? { message: raw }))
+    throw new Error(formatHttpErrorBody(response.status, body ?? { message: 'Request failed' }))
   }
   if (response.status === 204 || raw.trim() === '') {
     return undefined as T
@@ -402,7 +405,7 @@ export async function requestBlob(path: string, init?: GdcJsonFetchInit): Promis
           : 'You must change your password before using this resource.',
       )
     }
-    throw new Error(formatHttpErrorBody(response.status, body ?? { message: raw }))
+    throw new Error(formatHttpErrorBody(response.status, body ?? { message: 'Request failed' }))
   }
   const filename = parseContentDispositionFilename(response.headers.get('Content-Disposition'))
   const blob = await response.blob()
@@ -442,7 +445,7 @@ export async function safeRequestJsonResult<T>(path: string, init?: GdcJsonFetch
       return {
         ok: false,
         status: response.status,
-        message: formatHttpErrorBody(response.status, body ?? { message: raw }),
+        message: formatHttpErrorBody(response.status, body ?? { message: 'Request failed' }),
         authRequired: isAuthHttpStatus(response.status),
       }
     }

@@ -16,23 +16,30 @@ Current Goal
 
 현재 목표
 
-OSS v1.0 Release
+OSS v1.0 Stabilization
+
+(Historical: OSS v1.0 GA is complete. Do not treat pre-GA
+M20.4.1 / RC / GA sequencing as the current milestone.)
 
 현재 단계
 
-M20.4.1 Release Blocker Cleanup
+OSS v1 Stabilization
+(bug fixes, performance, UX, security)
 
-다음 단계
+제품 UX (이미 구현 — 다음 작업으로 착각하지 말 것)
 
-OSS v1.0 RC
+Destination First Wizard
+(Connect → Sample → Destinations → Route Processing → Deploy)
 
-그 다음
+Route Processing 5-stage
+(Transform → Protection → Classification → Policy → Delivery)
 
-OSS v1.0 GA
+그 이후 제안 금지 영역
 
-그 이후
+Enterprise IAM / SSO / SAML / OIDC / SCIM
+(PRODUCT-CHARTER Out Of Scope)
 
-M21 AI Gateway
+See docs/architecture/source-of-truth-index.md
 
 ==================================================
 Priority Order
@@ -45,8 +52,7 @@ Priority Order
 3. Data Control
 4. Delivery
 5. Governance
-6. AI Gateway
-7. Enterprise Features
+6. Enterprise Features
 
 ==================================================
 Governance Freeze Rule
@@ -114,12 +120,10 @@ Next Step Rule
 AI Gateway Lock
 ==================================================
 
-다음 조건 충족 전까지
+AI Gateway / AI Proxy is not Data Relay OSS product scope.
 
-- OSS v1.0 RC
-- OSS v1.0 GA
-
-AI Gateway 관련 제안 금지.
+Do not treat it as a completed current product capability.
+Do not propose it as the next roadmap phase.
 
 금지
 
@@ -130,6 +134,13 @@ AI Gateway 관련 제안 금지.
 - vLLM
 - Prompt Inspection
 - Response Inspection
+- AI Provider Connectivity
+- AI Stream
+- AI Proxy Receiver
+- AI Traffic Monitoring
+- AI Policy Enforcement
+- AI Audit
+- AI Governance
 
 ==================================================
 Architecture Drift Rule
@@ -155,7 +166,7 @@ Mandatory Check
 새 기능 제안 전 반드시 판단
 
 [WBS 영역]
-Runtime / Data Control / Delivery / Governance / AI Gateway
+Runtime / Data Control / Delivery / Governance
 
 [현재 마일스톤 포함 여부]
 YES / NO

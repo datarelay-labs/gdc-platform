@@ -45,8 +45,8 @@ vi.mock('../../api/operationalSnapshot', () => ({
   getOperationalSnapshot: vi.fn(async () => ({
     global: {
       health_status: 'DEGRADED',
-      total_streams: 3,
-      enabled_streams: 3,
+      total_streams: 4,
+      enabled_streams: 4,
       running_streams: 2,
       error_streams: 1,
       total_routes: 1,
@@ -80,6 +80,7 @@ vi.mock('../../api/operationalSnapshot', () => ({
         last_error_message: null,
         checkpoint_updated_at: null,
         checkpoint_lag_seconds: null,
+        open_schema_field_drift_count: 2,
       },
       {
         stream_id: 2,
@@ -122,6 +123,28 @@ vi.mock('../../api/operationalSnapshot', () => ({
         last_success_at: null,
         last_error_at: '2026-01-01T00:00:00Z',
         last_error_message: 'Destination Error',
+        checkpoint_updated_at: null,
+        checkpoint_lag_seconds: null,
+      },
+      {
+        stream_id: 4,
+        stream_name: 'idle-stream',
+        connector_id: 10,
+        source_id: 4,
+        enabled: true,
+        status: 'IDLE',
+        health_status: 'IDLE',
+        eps_1m: 0,
+        eps_5m: 0,
+        success_rate_5m: 0,
+        failure_rate_5m: 0,
+        avg_latency_ms: 0,
+        route_count: 0,
+        healthy_route_count: 0,
+        failed_route_count: 0,
+        last_success_at: null,
+        last_error_at: null,
+        last_error_message: null,
         checkpoint_updated_at: null,
         checkpoint_lag_seconds: null,
       },
@@ -176,6 +199,13 @@ describe('StreamsConsole operations UX', () => {
           connector_id: 11,
           stream_type: 'HTTP_API_POLLING',
           status: 'ERROR',
+        },
+        {
+          id: 4,
+          name: 'idle-stream',
+          connector_id: 10,
+          stream_type: 'HTTP_API_POLLING',
+          status: 'IDLE',
         },
       ],
     })
@@ -290,6 +320,94 @@ describe('StreamsConsole operations UX', () => {
     const groupRow = await screen.findByTestId('stream-group-row-Office365')
     expect(groupRow.className).toMatch(/ring-violet-500/)
     expect(await screen.findByTestId('stream-group-child-row-1')).toBeInTheDocument()
+  })
+
+  it('filters to no-data streams from ?filter=no-data and selects health chip', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/streams?filter=no-data']}>
+        <StreamsConsole />
+      </MemoryRouter>,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('health-summary-no-data')).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByTestId('streams-operational-filter-chip-no-data')).toBeInTheDocument()
+      expect(screen.getByTestId('stream-group-row-Office365')).toBeInTheDocument()
+      expect(screen.queryByTestId('stream-group-row-Amazon Web Services')).not.toBeInTheDocument()
+    })
+    await user.click(screen.getByTestId('stream-group-row-Office365'))
+    expect(await screen.findByTestId('stream-group-child-row-4')).toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-2')).not.toBeInTheDocument()
+  })
+
+  it('filters to low-volume streams from ?filter=low-volume', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/streams?filter=low-volume']}>
+        <StreamsConsole />
+      </MemoryRouter>,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('health-summary-low-volume')).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByTestId('streams-operational-filter-chip-low-volume')).toBeInTheDocument()
+    })
+    await user.click(await screen.findByTestId('stream-group-row-Office365'))
+    expect(await screen.findByTestId('stream-group-child-row-2')).toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-1')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-3')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-4')).not.toBeInTheDocument()
+  })
+
+  it('filters to confirmed schema-drift streams from ?filter=schema-drift', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/streams?filter=schema-drift']}>
+        <StreamsConsole />
+      </MemoryRouter>,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('health-summary-schema-drift')).toHaveAttribute('aria-pressed', 'true')
+      expect(screen.getByTestId('streams-operational-filter-chip-schema-drift')).toBeInTheDocument()
+      expect(screen.getByTestId('stream-group-row-Office365')).toBeInTheDocument()
+      expect(screen.queryByTestId('stream-group-row-Amazon Web Services')).not.toBeInTheDocument()
+    })
+    await user.click(screen.getByTestId('stream-group-row-Office365'))
+    expect(await screen.findByTestId('stream-group-child-row-1')).toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-2')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-4')).not.toBeInTheDocument()
+    expect(screen.getByTitle('Open Runtime: healthy-stream')).toHaveAttribute(
+      'href',
+      '/streams/1/runtime?tab=schema',
+    )
+  })
+
+  it('keeps expand_group working together with operational filter', async () => {
+    render(
+      <MemoryRouter initialEntries={['/streams?filter=no-data&expand_group=Office365']}>
+        <StreamsConsole />
+      </MemoryRouter>,
+    )
+    const groupRow = await screen.findByTestId('stream-group-row-Office365')
+    expect(groupRow.className).toMatch(/ring-violet-500/)
+    expect(await screen.findByTestId('stream-group-child-row-4')).toBeInTheDocument()
+    expect(screen.queryByTestId('stream-group-child-row-1')).not.toBeInTheDocument()
+  })
+
+  it('clears operational filter chip and restores full list', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/streams?filter=low-volume']}>
+        <StreamsConsole />
+      </MemoryRouter>,
+    )
+    await screen.findByTestId('streams-clear-operational-filter')
+    await user.click(screen.getByTestId('streams-clear-operational-filter'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('streams-operational-filter-chip-low-volume')).not.toBeInTheDocument()
+      expect(screen.getByTestId('stream-group-row-Office365')).toBeInTheDocument()
+      expect(screen.getByTestId('stream-group-row-Amazon Web Services')).toBeInTheDocument()
+    })
   })
 
   it('shows issue cause labels when a group is expanded', async () => {

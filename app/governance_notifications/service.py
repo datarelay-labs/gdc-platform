@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy import func, select
@@ -26,6 +27,8 @@ from app.governance_notifications.schemas import (
     GovernanceNotificationTestResponse,
 )
 from app.governance_notifications.webhook_sender import WebhookSender, get_webhook_sender
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationServiceError(Exception):
@@ -148,12 +151,23 @@ class NotificationService:
         )
         dispatched = 0
         for event in pending:
-            dispatch_notification_event(
-                event,
-                config,
-                email_sender=email_sender,
-                webhook_sender=webhook_sender,
-            )
+            try:
+                dispatch_notification_event(
+                    event,
+                    config,
+                    email_sender=email_sender,
+                    webhook_sender=webhook_sender,
+                )
+            except Exception:
+                logger.exception(
+                    "governance_notification_dispatch_failed event_id=%s",
+                    getattr(event, "id", None),
+                )
+                try:
+                    event.status = "FAILED"
+                    event.sent_at = _utc_now()
+                except Exception:
+                    logger.exception("governance_notification_status_update_failed")
             db.flush()
             dispatched += 1
         return dispatched
@@ -186,11 +200,15 @@ class NotificationService:
                     success=False,
                     message="No email recipients configured.",
                 )
-            ok = email.send_email(
-                recipients=recipients,
-                subject="[Governance] Notification test",
-                body="This is a test notification from the Governance Notifications settings.",
-            )
+            try:
+                ok = email.send_email(
+                    recipients=recipients,
+                    subject="[Governance] Notification test",
+                    body="This is a test notification from the Governance Notifications settings.",
+                )
+            except Exception:
+                logger.exception("governance_notification_test_email_failed")
+                ok = False
             return GovernanceNotificationTestResponse(
                 channel="email",
                 success=ok,

@@ -21,6 +21,7 @@ from app.sensitive_detection.models import (
 from app.schema_drift_policy.path_resolve import (
     build_protection_path_alias_map,
     collect_enriched_field_paths,
+    normalize_protection_json_path,
     path_exists_in_batch,
     resolve_protection_field_path,
 )
@@ -182,14 +183,20 @@ def apply_schema_drift_policy_to_batch(
             continue
 
         enriched_path = resolved.resolved_path
-        if not path_exists_in_batch(enriched_events, enriched_path):
+        extracted_norm = normalize_protection_json_path(extracted_path)
+        if not (
+            path_exists_in_batch(enriched_events, enriched_path)
+            or path_exists_in_batch(enriched_events, extracted_norm)
+        ):
             continue
 
-        sensitivity_class = sensitive_by_path.get(enriched_path)
-        is_sensitive = enriched_path in sensitive_by_path
+        sensitivity_class = sensitive_by_path.get(enriched_path) or sensitive_by_path.get(extracted_norm)
+        is_sensitive = enriched_path in sensitive_by_path or extracted_norm in sensitive_by_path
+        if not sensitivity_class:
+            sensitivity_class = None
         unknown_fields.append(
             UnknownFieldMatch(
-                extracted_path=extracted_path,
+                extracted_path=extracted_norm,
                 enriched_path=enriched_path,
                 drift_finding_id=int(drift.id),
                 is_sensitive=is_sensitive,
@@ -274,7 +281,7 @@ def apply_schema_drift_policy_to_batch(
                 continue
             if config.unknown_sensitive_field_policy != "auto_protect":
                 continue
-            if item.enriched_path in existing_paths:
+            if item.enriched_path in existing_paths or item.extracted_path in existing_paths:
                 continue
 
             protection_mode = auto_protect_mode_for_class(item.sensitivity_class)
@@ -325,7 +332,7 @@ def apply_schema_drift_policy_to_batch(
         for item in unknown_fields:
             if item.applied_policy != "drop_field":
                 continue
-            if item.enriched_path in existing_paths:
+            if item.enriched_path in existing_paths or item.extracted_path in existing_paths:
                 continue
             ephemeral_rules.append(
                 EphemeralProtectionRule(

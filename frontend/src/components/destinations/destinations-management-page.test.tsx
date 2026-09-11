@@ -29,6 +29,28 @@ vi.mock('./use-destinations-overview-data', () => ({
           metricsWindowLabel: '1h',
         },
       },
+      {
+        id: 10,
+        name: 'WarnDest',
+        destination_type: 'WEBHOOK_POST',
+        config_json: { url: 'https://example.test/hook' },
+        rate_limit_json: {},
+        enabled: true,
+        streams_using_count: 1,
+        routes: [{ route_id: 2, stream_id: 2, stream_name: 'Stream B', route_enabled: true, route_status: 'ENABLED' }],
+        created_at: null,
+        updated_at: null,
+        runtime: {
+          connectedStreams: 1,
+          connectedRoutes: 1,
+          successRatePct: 91,
+          currentEps: 8,
+          hasDeliveryActivity: true,
+          health: 'Warning',
+          recentIssues: ['Near capacity'],
+          metricsWindowLabel: '1h',
+        },
+      },
     ],
     loading: false,
     runtimeLoading: false,
@@ -78,5 +100,31 @@ describe('DestinationsManagementPage', () => {
     expect(screen.getByText('EPS (Current)')).toBeInTheDocument()
     expect(screen.getAllByText(/Healthy/).length).toBeGreaterThanOrEqual(1)
     expect(screen.getAllByText('99%').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('applies Warning health filter from ?filter=warning', async () => {
+    render(
+      <MemoryRouter initialEntries={['/destinations?filter=warning']}>
+        <DestinationsManagementPage />
+      </MemoryRouter>,
+    )
+    expect(await screen.findByTestId('destinations-health-filter')).toHaveValue('Warning')
+    expect(screen.getByText('WarnDest')).toBeInTheDocument()
+    expect(screen.queryByText('MDS')).not.toBeInTheDocument()
+  })
+
+  it('clears warning query filter when All Status is selected', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter initialEntries={['/destinations?filter=warning']}>
+        <DestinationsManagementPage />
+      </MemoryRouter>,
+    )
+    const select = await screen.findByTestId('destinations-health-filter')
+    expect(select).toHaveValue('Warning')
+    await user.selectOptions(select, 'ALL')
+    expect(select).toHaveValue('ALL')
+    expect(await screen.findByText('MDS')).toBeInTheDocument()
+    expect(screen.getByText('WarnDest')).toBeInTheDocument()
   })
 })

@@ -33,7 +33,12 @@ gdc.db
 tmp/
 *.tmp
 .cache/
-.cursor/
+.cursor/*
+# Keep Telegram auto-notify hooks trackable for local + cloud agents
+!.cursor/hooks.json
+!.cursor/hooks/
+!.cursor/hooks/**
+.cursor/hooks/state/
 .DS_Store
 *.log
 offline-release/

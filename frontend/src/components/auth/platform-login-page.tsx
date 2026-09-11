@@ -12,6 +12,7 @@ import {
   EyeOff,
 } from 'lucide-react'
 import { postAuthLogin } from '../../api/gdcAdmin'
+import { userFacingLoginError } from '../../auth/login-error'
 import { accessTokenRequiresPasswordChange } from '../../auth/jwt-session-hints'
 import { markSessionRequiresPasswordChange } from '../../auth/password-change-gate'
 import { persistSession } from '../../auth/session'
@@ -107,7 +108,8 @@ export function PlatformLoginPage({ onAuthenticated }: PlatformLoginPageProps) {
       }
       onAuthenticated()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sign-in failed.')
+      console.error('[gdc] login failed', err)
+      setError(userFacingLoginError(err))
     } finally {
       setBusy(false)
     }

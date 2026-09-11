@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { buildUnionSchema } from '../../utils/unionSchema'
+import { attachSensitiveSuggestions } from '../../utils/unionSchemaSensitiveSuggestions'
 import { UnionSchemaTree } from './union-schema-tree'
 
 describe('UnionSchemaTree', () => {
@@ -45,11 +46,20 @@ describe('UnionSchemaTree', () => {
     expect(phoneRow).not.toHaveTextContent('rare')
   })
 
-  it('shows sensitive badge for likely sensitive union fields', () => {
-    const schema = buildUnionSchema([
+  it('shows sensitive badge only when backend suggestions are attached', () => {
+    const base = buildUnionSchema([
       { status: 'ok', email: 'a@test.com' },
       { status: 'ok', email: 'b@test.com' },
       { status: 'ok', email: 'c@test.com' },
+    ])
+    const schema = attachSensitiveSuggestions(base, [
+      {
+        field_path: '$.email',
+        suggested_sensitive_type: 'Likely Email',
+        sensitivity_class: 'pii',
+        detection_method: 'field_name',
+        detection_source: 'sensitive_detection_engine',
+      },
     ])
 
     render(<UnionSchemaTree schema={schema} search="" onPickPath={vi.fn()} expandStrategy="all" />)
@@ -59,27 +69,17 @@ describe('UnionSchemaTree', () => {
     expect(emailRow).toHaveTextContent('sensitive')
   })
 
-  it('does not show sensitive badge for non-matching fields', () => {
+  it('does not show sensitive badge without backend suggestions', () => {
     const schema = buildUnionSchema([
-      { status: 'ok', user: 'alice', id: '1' },
-      { status: 'ok', user: 'bob', id: '2' },
+      { status: 'ok', email: 'a@test.com', api_key: 'sk', credit_card: '4111' },
     ])
 
     render(<UnionSchemaTree schema={schema} search="" onPickPath={vi.fn()} expandStrategy="all" />)
 
-    const statusRow = screen.getByTitle('$.status').closest('.group')
-    expect(statusRow).not.toHaveTextContent('sensitive')
-    const userRow = screen.getByTitle('$.user').closest('.group')
-    expect(userRow).not.toHaveTextContent('sensitive')
-  })
-
-  it('shows sensitive badge for email sample values on generic field names', () => {
-    const schema = buildUnionSchema([{ contact: 'user@example.com' }])
-
-    render(<UnionSchemaTree schema={schema} search="" onPickPath={vi.fn()} expandStrategy="all" />)
-
-    const contactRow = screen.getByTitle('$.contact').closest('.group')
-    expect(contactRow).toHaveTextContent('sensitive')
+    expect(screen.getByTitle('$.email').closest('.group')).not.toHaveTextContent('sensitive')
+    expect(screen.getByTitle('$.api_key').closest('.group')).not.toHaveTextContent('sensitive')
+    expect(screen.getByTitle('$.credit_card').closest('.group')).not.toHaveTextContent('sensitive')
+    expect(screen.getByTitle('$.status').closest('.group')).not.toHaveTextContent('sensitive')
   })
 
   it('calls onSelectPath and onPickPath when a field is clicked', () => {

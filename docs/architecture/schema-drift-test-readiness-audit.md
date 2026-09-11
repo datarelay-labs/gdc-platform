@@ -1,5 +1,8 @@
 # Schema Drift Test Readiness Audit — Commit A
 
+**Status:** ARCHIVE_CANDIDATE (point-in-time audit)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), [`DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md`](../ux/DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md)
+
 **Date:** 2026-06-17  
 **Branch:** `feature/sensitive-detection-m5-clean` (`1806a10` on `origin`)  
 **Commit A candidate:**

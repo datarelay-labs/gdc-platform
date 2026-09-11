@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { buildInitialState } from '../components/streams/wizard/wizard-state'
 import {
+  analysisFromParsedRecordArray,
   buildApiTestExtractedEventsPatch,
   buildApiTestSuccessPatch,
   canGenerateWizardUnionSchema,
   estimateApiTestRecordCount,
+  parsedRecordEvents,
 } from './wizardUnionSchema'
 
 describe('wizardUnionSchema', () => {
@@ -53,6 +55,16 @@ describe('wizardUnionSchema', () => {
     const ready = buildApiTestExtractedEventsPatch(events, null, state)
     expect(canGenerateWizardUnionSchema(state)).toBe(true)
     expect(ready.unionSchema?.total_events).toBe(2)
+  })
+
+  it('analysisFromParsedRecordArray uses actual records and $ event root default', () => {
+    const parsed = [{ user: 'alice', email: 'alice@example.com' }]
+    expect(parsedRecordEvents(parsed)).toEqual(parsed)
+    const analysis = analysisFromParsedRecordArray(parsed)
+    expect(analysis?.selectedEventArrayDefault).toBe('$')
+    expect(analysis?.sampleEvent).toEqual({ user: 'alice', email: 'alice@example.com' })
+    expect(analysisFromParsedRecordArray([])?.sampleEvent).toBeNull()
+    expect(analysisFromParsedRecordArray({ not: 'array' })).toBeNull()
   })
 
   it('estimateApiTestRecordCount detects homogeneous object maps', () => {

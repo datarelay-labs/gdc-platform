@@ -29,10 +29,9 @@ export function isInternalOperatorUiEnabled(): boolean {
 }
 
 /**
- * AI Gateway Foundation operator surface (M21.4).
- * OSS default: hidden until explicitly enabled at build time.
+ * AI Gateway is not Data Relay OSS product scope.
+ * Operator UI stays off regardless of build-time env.
  */
 export function isAiGatewayFoundationEnabled(): boolean {
-  const raw = import.meta.env.VITE_AI_GATEWAY_FOUNDATION
-  return raw === 'true' || raw === '1' || raw === 'on'
+  return false
 }

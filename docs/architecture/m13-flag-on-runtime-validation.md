@@ -1,5 +1,8 @@
 # M13 Flag ON Runtime Validation
 
+**Status:** SUPERSEDED (historical validation snapshot)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), Runtime code + tests
+
 **Date:** 2026-06-17  
 **Flag:** `GDC_ROUTE_PROCESSING_ENABLED=true`  
 **Prerequisite:** Circular import fix applied

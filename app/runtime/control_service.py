@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.destinations.models import Destination
 from app.connectors.models import Connector
@@ -23,7 +27,7 @@ from app.platform_admin.config_entity_snapshots import (
 from app.routes.models import Route
 from app.runners.stream_runner import StreamRunner
 from app.scheduler import runtime_state as scheduler_runtime_state
-from app.security.secrets import mask_secrets
+from app.security.secrets import mask_secrets, preserve_masked_secrets
 from app.sources.models import Source
 from app.runtime.schemas import (
     ConnectorUISaveRequest,
@@ -140,6 +144,15 @@ def start_stream(db: Session, stream_id: int, request: object | None = None) -> 
         raise StreamNotFoundError(stream_id)
     stream.enabled = True
     stream.status = "RUNNING"
+    # Deploy/activation: confirm Stream Schema Drift baseline from Union Schema.
+    # API Test alone does not call start — baseline is not auto-confirmed there.
+    try:
+        from app.schema_observation.union_schema_baseline import establish_baseline_from_union_schema
+
+        config = stream.config_json if isinstance(stream.config_json, dict) else None
+        establish_baseline_from_union_schema(db, stream_id, config_json=config)
+    except Exception:
+        logger.exception("schema_baseline_from_union_schema_failed stream_id=%s", stream_id)
     journal.record_audit_event(
         db,
         action="STREAM_STARTED",
@@ -690,7 +703,10 @@ def save_runtime_destination_ui_config(
     dest_before = serialize_destination_config(destination)
     destination.name = payload.name
     destination.enabled = bool(payload.enabled)
-    destination.config_json = dict(payload.config_json)
+    destination.config_json = preserve_masked_secrets(
+        dict(payload.config_json),
+        dict(destination.config_json or {}),
+    )
     destination.rate_limit_json = dict(payload.rate_limit_json)
 
     db.flush()
@@ -709,7 +725,7 @@ def save_runtime_destination_ui_config(
         destination_id=int(destination.id),
         name=str(destination.name),
         enabled=bool(destination.enabled),
-        config_json=dict(destination.config_json or {}),
+        config_json=mask_secrets(dict(destination.config_json or {})),
         rate_limit_json=dict(destination.rate_limit_json or {}),
         message="Destination UI configuration saved successfully",
     )
@@ -762,19 +778,7 @@ _MASK = "********"
 def _merge_source_config_preserve_secrets(incoming: dict[str, Any], existing: dict[str, Any] | None) -> dict[str, Any]:
     """Keep existing secret-ish values when UI resubmits the redacted mask."""
 
-    out = dict(incoming)
-    prev = dict(existing or {})
-    for key in ("secret_key", "access_key", "bearer_token", "api_key_value"):
-        if key not in out:
-            continue
-        val = out.get(key)
-        if val in (None, ""):
-            if key in prev:
-                out[key] = prev[key]
-            continue
-        if str(val) == _MASK and key in prev:
-            out[key] = prev[key]
-    return out
+    return preserve_masked_secrets(dict(incoming), dict(existing or {}))
 
 
 def save_runtime_source_ui_config(
@@ -791,7 +795,7 @@ def save_runtime_source_ui_config(
     source.enabled = bool(payload.enabled)
     merged_cfg = _merge_source_config_preserve_secrets(dict(payload.config_json), source.config_json)
     source.config_json = merged_cfg
-    source.auth_json = dict(payload.auth_json)
+    source.auth_json = preserve_masked_secrets(dict(payload.auth_json), dict(source.auth_json or {}))
     if payload.source_type is not None and str(payload.source_type).strip():
         source.source_type = str(payload.source_type).strip().upper()
 

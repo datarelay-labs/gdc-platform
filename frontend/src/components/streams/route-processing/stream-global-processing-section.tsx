@@ -1,4 +1,4 @@
-import { CheckCircle2, ExternalLink, ShieldCheck, Wand2 } from 'lucide-react'
+import { CheckCircle2, ExternalLink, Scale, ShieldCheck, Tags, Wand2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { NAV_PATH } from '../../../config/nav-paths'
 
@@ -6,7 +6,6 @@ type StreamSharedCard = {
   key: string
   title: string
   description: string
-  href: string
   icon: typeof Wand2
 }
 
@@ -15,15 +14,25 @@ const STREAM_SHARED_CARDS: StreamSharedCard[] = [
     key: 'transform',
     title: 'Transform',
     description: 'Mapping, transform rules, field operations.',
-    href: NAV_PATH.streams,
     icon: Wand2,
   },
   {
     key: 'data_protection',
     title: 'Data Protection',
-    description: 'Schema drift policy, protection rules, delivery behavior.',
-    href: NAV_PATH.streams,
+    description: 'Schema drift policy and field protection rules.',
     icon: ShieldCheck,
+  },
+  {
+    key: 'classification',
+    title: 'Classification',
+    description: 'Shared default level inherited by every route.',
+    icon: Tags,
+  },
+  {
+    key: 'policy',
+    title: 'Policy',
+    description: 'Shared delivery policy inherited by every route.',
+    icon: Scale,
   },
 ]
 
@@ -48,7 +57,8 @@ export function StreamSharedProcessingSection({
             </span>
           </div>
           <p className="mt-0.5 text-[11px] text-slate-600 dark:text-gdc-muted">
-            Applied to all routes — inherited unless overridden per destination.
+            Applied to all routes — Transform, Data Protection, Classification, and Policy are inherited unless
+            overridden per destination. Delivery stays route-specific.
           </p>
           {routeCount > 0 ? (
             <p className="mt-1 text-[10px] font-semibold text-violet-700 dark:text-violet-300" data-testid="stream-shared-processing-route-count">
@@ -57,7 +67,7 @@ export function StreamSharedProcessingSection({
           ) : null}
         </div>
 
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           {STREAM_SHARED_CARDS.map((card) => {
             const Icon = card.icon
             return (

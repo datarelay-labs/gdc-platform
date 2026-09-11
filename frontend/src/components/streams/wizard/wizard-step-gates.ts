@@ -71,6 +71,16 @@ const WIZARD_STEP_ORDER: readonly WizardStepKey[] = [
   'deploy',
 ]
 
+/** Source-type-aware gate for live sample / query test (wizard Run Test). */
+export function wizardCanRunLiveSampleTest(state: Pick<WizardState, 'connector' | 'stream'>): boolean {
+  if (state.connector.connectorId == null || state.connector.sourceId == null) return false
+  const sourceType = state.connector.sourceType
+  if (sourceType === 'S3_OBJECT_POLLING') return true
+  if (sourceType === 'REMOTE_FILE_POLLING') return state.stream.remoteDirectory.trim().length > 0
+  if (sourceType === 'DATABASE_QUERY') return state.stream.sqlQuery.trim().length > 0
+  return state.stream.endpoint.trim().length > 0
+}
+
 /** Whether the latest API test returned a usable response payload. */
 export function wizardApiTestHasResponsePayload(state: Pick<WizardState, 'apiTest'>): boolean {
   const payload = state.apiTest.parsedJson ?? state.apiTest.rawResponse
@@ -214,6 +224,13 @@ export function wizardSampleStepBlockReason(state: WizardState): string {
     return 'Wait for Run Test to finish.'
   }
   if (!wizardApiTestReady(state)) {
+    if (
+      state.apiTest.status === 'success' &&
+      (state.apiTest.eventCount === 0 ||
+        (Array.isArray(state.apiTest.parsedJson) && state.apiTest.parsedJson.length === 0))
+    ) {
+      return 'Sample data is not available (no records). Union Schema cannot be generated.'
+    }
     return 'Run a successful API Test on the Run Test tab.'
   }
   if (!wizardRecordPathReady(state)) {

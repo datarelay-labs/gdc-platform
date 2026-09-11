@@ -49,6 +49,7 @@ class OperationalStreamSnapshot(BaseModel):
     last_error_message: str | None = None
     checkpoint_updated_at: datetime | None = None
     checkpoint_lag_seconds: int | None = None
+    open_schema_field_drift_count: int = 0
 
 
 class OperationalRouteSnapshot(BaseModel):

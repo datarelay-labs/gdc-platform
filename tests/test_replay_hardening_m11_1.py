@@ -27,7 +27,7 @@ from app.replay.metrics import (
     REPLAY_EVENT_REPLAY_FAILED_STAGE,
 )
 from app.replay.models import (
-    DELIVERY_KIND_DYNAMIC_ROUTE,
+    DELIVERY_KIND_BASE_ROUTE,
     DELIVERY_KIND_FAILOVER_SECONDARY,
     REPLAY_STATUS_DISCARDED,
     REPLAY_STATUS_FAILED,
@@ -62,6 +62,7 @@ from tests.test_replay_engine_m11 import (
 from tests.test_stream_runner_e2e import (
     _FakePoller,
     _FakeWebhookSender,
+    _add_enabled_route_for_destination,
     _build_runner,
     _seed_stream_runtime,
 )
@@ -241,6 +242,7 @@ def test_dynamic_route_failure_records_replay_event(
     )
     db_session.add(security)
     db_session.flush()
+    _add_enabled_route_for_destination(db_session, stream_id, int(security.id))
     create_dynamic_route(
         db_session,
         stream_id=stream_id,
@@ -274,13 +276,13 @@ def test_dynamic_route_failure_records_replay_event(
         db_session.query(StreamReplayEvent)
         .filter(
             StreamReplayEvent.stream_id == stream_id,
-            StreamReplayEvent.delivery_kind == DELIVERY_KIND_DYNAMIC_ROUTE,
+            StreamReplayEvent.delivery_kind == DELIVERY_KIND_BASE_ROUTE,
         )
         .all()
     )
     assert len(rows) == 1
     assert rows[0].status == REPLAY_STATUS_PENDING
-    assert rows[0].dynamic_route_id is not None
+    assert rows[0].destination_id == int(security.id)
     after_cp = _checkpoint_value(db_session, stream_id)
     assert after_cp != before_cp
 

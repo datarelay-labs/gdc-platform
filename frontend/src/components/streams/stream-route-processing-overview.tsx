@@ -2,10 +2,10 @@ import { ExternalLink, Loader2, RefreshCw, Route } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchDestinationsList, type DestinationListItem } from '../../api/gdcDestinations'
-import { fetchRouteClassificationEffective } from '../../api/gdcRouteClassification'
-import { fetchRoutePolicyEffective } from '../../api/gdcRoutePolicy'
-import { fetchRouteProtectionEffective } from '../../api/gdcRouteProtection'
-import { fetchRouteTransformEffective } from '../../api/gdcRouteTransform'
+import {
+  fetchGovernanceWorkspaceSnapshot,
+  type GovernanceWorkspaceRouteSnapshot,
+} from '../../api/gdcGovernanceWorkspaceSnapshot'
 import { fetchRoutesList, type RouteRead } from '../../api/gdcRoutes'
 import { routeEditPath } from '../../config/nav-paths'
 import { useMountAbortController } from '../../hooks/use-mount-abort-signal'
@@ -15,6 +15,7 @@ import { RouteEditTransformPanel } from '../routes/route-edit-transform-panel'
 import { StreamSharedProcessingSection } from './route-processing/stream-global-processing-section'
 import { StreamRouteProcessingNavigator } from './route-processing/stream-route-processing-navigator'
 import { RouteProcessingDetailHeader } from './route-processing/route-processing-detail-header'
+import { RouteProcessingInheritToggle } from './route-processing/route-processing-inherit-toggle'
 import { RouteProcessingModeSelector } from './route-processing/route-processing-mode-selector'
 import { ROUTE_PROCESSING_COPY } from './route-processing/route-processing-labels'
 import { ClassificationPanel } from './classification-panel'
@@ -30,38 +31,23 @@ type RouteProcessingStatuses = {
   policy: ProcessingStatus | null
 }
 
-type DetailTab = 'transform' | 'data_protection' | 'delivery'
+type DetailTab = 'transform' | 'data_protection' | 'classification' | 'policy' | 'delivery'
 
 const DETAIL_TABS: ReadonlyArray<{ key: DetailTab; label: string }> = [
   { key: 'transform', label: 'Transform' },
   { key: 'data_protection', label: 'Data Protection' },
+  { key: 'classification', label: 'Classification' },
+  { key: 'policy', label: 'Policy' },
   { key: 'delivery', label: 'Delivery' },
 ]
 
-async function fetchConcernProcessingStatus(
-  fetcher: (options?: { signal?: AbortSignal }) => Promise<{ processing_status?: ProcessingStatus } | null>,
-  signal?: AbortSignal,
-): Promise<ProcessingStatus | null> {
-  try {
-    const result = await fetcher({ signal })
-    return result?.processing_status ?? null
-  } catch (e) {
-    if (isRequestAborted(e)) throw e
-    return null
+function statusesFromSnapshotRow(row: GovernanceWorkspaceRouteSnapshot | undefined): RouteProcessingStatuses {
+  return {
+    transform: row?.transform?.processing_status ?? null,
+    protection: row?.protection?.processing_status ?? null,
+    classification: row?.classification?.processing_status ?? null,
+    policy: row?.policy?.processing_status ?? null,
   }
-}
-
-async function fetchRouteProcessingStatuses(
-  routeId: number,
-  signal?: AbortSignal,
-): Promise<RouteProcessingStatuses> {
-  const [transform, protection, classification, policy] = await Promise.all([
-    fetchConcernProcessingStatus((opts) => fetchRouteTransformEffective(routeId, opts), signal),
-    fetchConcernProcessingStatus((opts) => fetchRouteProtectionEffective(routeId, opts), signal),
-    fetchConcernProcessingStatus((opts) => fetchRouteClassificationEffective(routeId, opts), signal),
-    fetchConcernProcessingStatus((opts) => fetchRoutePolicyEffective(routeId, opts), signal),
-  ])
-  return { transform, protection, classification, policy }
 }
 
 function routeStatusesUseShared(statuses: RouteProcessingStatuses | undefined): boolean {
@@ -79,30 +65,26 @@ function StreamRouteDetailTabs({
   route,
   destinationLabel,
   destinationMissing,
-  tab,
-  onTabChange,
   processingStatuses,
   statusesPending,
+  snapshotRow,
 }: {
   streamId: number
   route: RouteRead
   destinationLabel: string | null
   destinationMissing: boolean
-  tab: DetailTab
-  onTabChange: (tab: DetailTab) => void
   processingStatuses: RouteProcessingStatuses | undefined
   statusesPending: boolean
+  snapshotRow: GovernanceWorkspaceRouteSnapshot | undefined
 }) {
+  const [tab, setTab] = useState<DetailTab>('transform')
+  useEffect(() => {
+    setTab('transform')
+  }, [route.id])
   const routeEditHref = routeEditPath(String(route.id))
   const usesShared = routeStatusesUseShared(processingStatuses)
   const routeMode = usesShared ? 'shared' : 'override'
-  const visibleTabs = usesShared ? DETAIL_TABS.filter((item) => item.key === 'delivery') : DETAIL_TABS
-
-  useEffect(() => {
-    if (statusesPending || !processingStatuses) return
-    if (usesShared && tab !== 'delivery') onTabChange('delivery')
-    if (!usesShared && tab === 'delivery') onTabChange('transform')
-  }, [usesShared, tab, onTabChange, statusesPending, processingStatuses])
+  const panelId = 'stream-route-detail-tabpanel'
 
   return (
     <section
@@ -148,14 +130,20 @@ function StreamRouteDetailTabs({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-1 border-b border-slate-100 px-2 pt-2 dark:border-gdc-border" role="tablist">
-        {visibleTabs.map((item) => (
+      <div
+        className="flex flex-wrap gap-1 border-b border-slate-100 px-2 pt-2 dark:border-gdc-border"
+        role="tablist"
+        aria-label="Route processing stages"
+      >
+        {DETAIL_TABS.map((item) => (
           <button
             key={item.key}
             type="button"
             role="tab"
+            id={`stream-route-detail-tab-${item.key}`}
             aria-selected={tab === item.key}
-            onClick={() => onTabChange(item.key)}
+            aria-controls={panelId}
+            onClick={() => setTab(item.key)}
             className={cn(
               '-mb-px border-b-2 px-2.5 pb-2 text-[11px] font-semibold',
               tab === item.key
@@ -169,27 +157,86 @@ function StreamRouteDetailTabs({
         ))}
       </div>
 
-      <div className="space-y-3 p-3">
-        {!usesShared && tab === 'transform' ? (
+      <div id={panelId} role="tabpanel" aria-labelledby={`stream-route-detail-tab-${tab}`} className="space-y-3 p-3">
+        {tab === 'transform' ? (
           <div className="space-y-3" data-testid="route-processing-transform-section">
-            <RouteEditTransformPanel routeId={route.id} streamId={streamId} />
+            <RouteProcessingInheritToggle
+              checked={processingStatuses?.transform === 'Inherited'}
+              onChange={() => {}}
+              concernLabel="Transform"
+              readonly
+              processingStatus={processingStatuses?.transform}
+              statusPending={statusesPending}
+              data-testid="stream-route-inherit-transform"
+            />
+            <RouteEditTransformPanel
+              routeId={route.id}
+              streamId={streamId}
+              initialEffective={snapshotRow?.transform}
+            />
           </div>
         ) : null}
 
-        {!usesShared && tab === 'data_protection' ? (
+        {tab === 'data_protection' ? (
           <div className="space-y-4" data-testid="route-processing-data-protection-section">
+            <RouteProcessingInheritToggle
+              checked={processingStatuses?.protection === 'Inherited'}
+              onChange={() => {}}
+              concernLabel="Data Protection"
+              readonly
+              processingStatus={processingStatuses?.protection}
+              statusPending={statusesPending}
+              data-testid="stream-route-inherit-protection"
+            />
             <section data-testid="route-processing-protection-section">
               <p className="mb-2 text-[11px] font-semibold text-slate-800 dark:text-slate-100">Protection Rules</p>
-              <ProtectionPanel streamId={streamId} routeId={route.id} canOperate />
+              <ProtectionPanel
+                streamId={streamId}
+                routeId={route.id}
+                canOperate
+                initialEffective={snapshotRow?.protection}
+              />
             </section>
-            <section data-testid="route-processing-classification-section">
-              <p className="mb-2 text-[11px] font-semibold text-slate-800 dark:text-slate-100">Schema Drift Policy</p>
-              <ClassificationPanel streamId={streamId} routeId={route.id} canOperate />
-            </section>
-            <section data-testid="route-processing-policy-section">
-              <p className="mb-2 text-[11px] font-semibold text-slate-800 dark:text-slate-100">Delivery Behavior</p>
-              <PolicyPanel streamId={streamId} routeId={route.id} canOperate />
-            </section>
+          </div>
+        ) : null}
+
+        {tab === 'classification' ? (
+          <div className="space-y-4" data-testid="route-processing-classification-section">
+            <RouteProcessingInheritToggle
+              checked={processingStatuses?.classification === 'Inherited'}
+              onChange={() => {}}
+              concernLabel="Classification"
+              readonly
+              processingStatus={processingStatuses?.classification}
+              statusPending={statusesPending}
+              data-testid="stream-route-inherit-classification"
+            />
+            <ClassificationPanel
+              streamId={streamId}
+              routeId={route.id}
+              canOperate
+              initialEffective={snapshotRow?.classification}
+            />
+          </div>
+        ) : null}
+
+        {tab === 'policy' ? (
+          <div className="space-y-4" data-testid="route-processing-policy-section">
+            <RouteProcessingInheritToggle
+              checked={processingStatuses?.policy === 'Inherited'}
+              onChange={() => {}}
+              concernLabel="Policy"
+              readonly
+              processingStatus={processingStatuses?.policy}
+              statusPending={statusesPending}
+              data-testid="stream-route-inherit-policy"
+            />
+            <PolicyPanel
+              streamId={streamId}
+              routeId={route.id}
+              canOperate
+              initialEffective={snapshotRow?.policy}
+            />
           </div>
         ) : null}
 
@@ -230,9 +277,9 @@ export function StreamRouteProcessingOverview({ streamId }: { streamId: number }
   const [routes, setRoutes] = useState<RouteRead[]>([])
   const [destinations, setDestinations] = useState<DestinationListItem[]>([])
   const [statusByRoute, setStatusByRoute] = useState<Record<number, RouteProcessingStatuses>>({})
+  const [snapshotByRoute, setSnapshotByRoute] = useState<Record<number, GovernanceWorkspaceRouteSnapshot>>({})
   const [statusesLoading, setStatusesLoading] = useState(true)
   const [selectedRouteId, setSelectedRouteId] = useState<number | null>(null)
-  const [detailTab, setDetailTab] = useState<DetailTab>('transform')
 
   const destinationById = useMemo(() => new Map(destinations.map((d) => [d.id, d])), [destinations])
 
@@ -244,30 +291,34 @@ export function StreamRouteProcessingOverview({ streamId }: { streamId: number }
     setStatusesLoading(true)
     setError(null)
     try {
-      const [allRoutes, dests] = await Promise.all([
+      const [allRoutes, dests, snapshot] = await Promise.all([
         fetchRoutesList(fetchOpts),
         fetchDestinationsList(fetchOpts),
+        fetchGovernanceWorkspaceSnapshot(streamId, fetchOpts),
       ])
       if (!isCurrent()) return
       const streamRoutes = (allRoutes ?? []).filter((r) => r.stream_id === streamId)
+      const nextSnapshotByRoute: Record<number, GovernanceWorkspaceRouteSnapshot> = {}
+      const statuses: Record<number, RouteProcessingStatuses> = {}
+      for (const row of snapshot?.routes ?? []) {
+        nextSnapshotByRoute[row.route_id] = row
+      }
+      for (const route of streamRoutes) {
+        statuses[route.id] = statusesFromSnapshotRow(nextSnapshotByRoute[route.id])
+      }
       setRoutes(streamRoutes)
       setDestinations(dests ?? [])
+      setSnapshotByRoute(nextSnapshotByRoute)
+      setStatusByRoute(statuses)
       setSelectedRouteId((prev) => {
         if (prev != null && streamRoutes.some((r) => r.id === prev)) return prev
         return streamRoutes[0]?.id ?? null
       })
-      const statuses: Record<number, RouteProcessingStatuses> = {}
-      await Promise.all(
-        streamRoutes.map(async (route) => {
-          statuses[route.id] = await fetchRouteProcessingStatuses(route.id, fetchOpts.signal)
-        }),
-      )
-      if (!isCurrent()) return
-      setStatusByRoute(statuses)
     } catch (e) {
       if (!isCurrent() || isRequestAborted(e)) return
       setError(e instanceof Error ? e.message : String(e))
       setStatusByRoute({})
+      setSnapshotByRoute({})
     } finally {
       if (isCurrent()) {
         setLoading(false)
@@ -284,14 +335,6 @@ export function StreamRouteProcessingOverview({ streamId }: { streamId: number }
   }, [load])
 
   const selectedRoute = routes.find((r) => r.id === selectedRouteId) ?? null
-
-  useEffect(() => {
-    if (statusesLoading) return
-    const statuses = selectedRouteId != null ? statusByRoute[selectedRouteId] : undefined
-    if (!statuses) return
-    if (routeStatusesUseShared(statuses)) setDetailTab('delivery')
-    else setDetailTab('transform')
-  }, [selectedRouteId, statusByRoute, statusesLoading])
 
   return (
     <section
@@ -346,13 +389,11 @@ export function StreamRouteProcessingOverview({ streamId }: { streamId: number }
                 : null
             }
             destinationMissing={
-              selectedRoute.destination_id == null ||
-              !destinationById.get(selectedRoute.destination_id)
+              selectedRoute.destination_id == null || !destinationById.get(selectedRoute.destination_id)
             }
-            tab={detailTab}
-            onTabChange={setDetailTab}
-            processingStatuses={selectedRouteId != null ? statusByRoute[selectedRouteId] : undefined}
-            statusesPending={statusesLoading && selectedRouteId != null && statusByRoute[selectedRouteId] === undefined}
+            processingStatuses={statusByRoute[selectedRoute.id]}
+            statusesPending={statusesLoading && statusByRoute[selectedRoute.id] === undefined}
+            snapshotRow={snapshotByRoute[selectedRoute.id]}
           />
         ) : (
           <section

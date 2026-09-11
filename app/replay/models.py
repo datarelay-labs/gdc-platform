@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database import Base
 
 REPLAY_STATUS_PENDING = "pending"
+REPLAY_STATUS_IN_PROGRESS = "in_progress"
 REPLAY_STATUS_REPLAYED = "replayed"
 REPLAY_STATUS_FAILED = "failed"
 REPLAY_STATUS_DISCARDED = "discarded"
@@ -18,6 +19,7 @@ REPLAY_STATUS_DISCARDED = "discarded"
 REPLAY_STATUSES = frozenset(
     {
         REPLAY_STATUS_PENDING,
+        REPLAY_STATUS_IN_PROGRESS,
         REPLAY_STATUS_REPLAYED,
         REPLAY_STATUS_FAILED,
         REPLAY_STATUS_DISCARDED,

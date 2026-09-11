@@ -28,6 +28,7 @@ from app.streams.models import Stream
 from tests.test_stream_runner_e2e import (
     _FakePoller,
     _FakeWebhookSender,
+    _add_enabled_route_for_destination,
     _build_runner,
     _seed_stream_runtime,
 )
@@ -258,6 +259,7 @@ def test_dynamic_routing_ai_provider_resolves_runtime_config(db_session: Session
     db_session.flush()
 
     seeded = _seed_stream_runtime(db_session)
+    _add_enabled_route_for_destination(db_session, int(seeded["stream_id"]), int(ai_dest.id))
     create_dynamic_route(
         db_session,
         stream_id=int(seeded["stream_id"]),

@@ -1,5 +1,12 @@
 # Generic Data Connector Platform Master Design
 
+**Status:** SUPERSEDED  
+**Superseded By:** [`docs/architecture/source-of-truth-index.md`](architecture/source-of-truth-index.md), [`PRODUCT-CHARTER v1.2.1`](source-of-truth/PRODUCT-CHARTER-Version-1.2.1-FINAL.txt), [`docs/architecture/OSS-v1-ARCHITECTURE.md`](architecture/OSS-v1-ARCHITECTURE.md)
+
+Do **not** use this document as Source of Truth. It predates PRODUCT-CHARTER v1.2.1, Destination First wizard, and Route Processing UX. Keep for historical runtime/entity design evidence only.
+
+---
+
 ## 0. 문서 목적
 
 이 문서는 **Generic Data Connector Platform** 프로젝트의 마스터 설계서이다.

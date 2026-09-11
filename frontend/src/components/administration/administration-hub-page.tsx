@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { NAV_PATH, SETTINGS_SECTION_PATH } from '../../config/nav-paths'
+import { canViewGovernance } from '../../lib/governance-rbac'
 import { cn } from '../../lib/utils'
 
 type HubCard = {
@@ -20,7 +21,7 @@ type HubCard = {
   testId: string
 }
 
-const HUB_CARDS: readonly HubCard[] = [
+const BASE_HUB_CARDS: readonly HubCard[] = [
   {
     title: 'HTTPS',
     description: 'TLS listener, certificate SANs, and HTTP-to-HTTPS redirect.',
@@ -79,19 +80,29 @@ const HUB_CARDS: readonly HubCard[] = [
   },
 ] as const
 
+const GOVERNANCE_OPS_CARD: HubCard = {
+  title: 'Governance operations',
+  description: 'Violations, quarantine, replay, and policy posture — not stream configuration.',
+  path: NAV_PATH.governance,
+  icon: Shield,
+  testId: 'admin-hub-governance-operations',
+}
+
 export function AdministrationHubPage() {
+  const hubCards = canViewGovernance() ? [GOVERNANCE_OPS_CARD, ...BASE_HUB_CARDS] : BASE_HUB_CARDS
+
   return (
     <div className="w-full min-w-0 space-y-5" data-testid="administration-hub-page">
       <div className="border-b border-slate-200/80 pb-4 dark:border-gdc-divider">
         <h2 className="text-lg font-semibold tracking-tight text-slate-900 dark:text-slate-50">Administration</h2>
         <p className="mt-1 max-w-2xl text-[13px] text-slate-600 dark:text-gdc-muted">
           Platform settings, retention, audit, backup, and system health. Stream and delivery configuration lives under
-          Data Sources and Delivery.
+          Data Sources and Delivery. Governance configuration is set in Stream Wizard / Route Processing.
         </p>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label="Administration areas">
-        {HUB_CARDS.map((card) => {
+        {hubCards.map((card) => {
           const Icon = card.icon
           return (
             <Link

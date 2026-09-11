@@ -28,7 +28,11 @@ import { StreamEditDeliveryPanel } from './stream-edit-delivery-panel'
 import { StepRouteProcessing } from './wizard/step-route-processing'
 import { StepDeploy } from './wizard/step-deploy'
 import { WizardStepper } from './wizard/wizard-stepper'
-import { hydrateWizardStateFromStream, refreshWizardDestinationsFromStream } from './wizard/wizard-stream-hydrate'
+import {
+  hydrateWizardStateFromStream,
+  preserveWizardRouteProcessingDrafts,
+  refreshWizardDestinationsFromStream,
+} from './wizard/wizard-stream-hydrate'
 import { persistWizardStreamEdits } from './wizard/wizard-stream-persist'
 import {
   WIZARD_STEPS,
@@ -45,6 +49,8 @@ import {
 } from './wizard/wizard-step-gates'
 import { wizardExtractEvents } from './wizard/wizard-json-extract'
 import { buildApiTestExtractedEventsPatch, buildApiTestSuccessPatch } from '../../utils/wizardUnionSchema'
+import { useUnionSchemaSensitiveEnrichment } from './wizard/use-union-schema-sensitive-enrichment'
+import type { UnionSchema } from '../../utils/unionSchema'
 import {
   buildAnalysisForSample,
   getOperationalSample,
@@ -206,6 +212,17 @@ export function StreamEditWizardPage() {
         : prev,
     )
   }, [])
+  const applyEnrichedUnionSchema = useCallback((schema: UnionSchema) => {
+    setState((prev) => {
+      if (!prev?.apiTest.unionSchema || prev.apiTest.unionSchema.sensitive_suggestions_applied) return prev
+      return { ...prev, apiTest: { ...prev.apiTest, unionSchema: schema } }
+    })
+  }, [])
+  useUnionSchemaSensitiveEnrichment(
+    state?.apiTest.unionSchema ?? null,
+    state?.apiTest.extractedEvents ?? [],
+    applyEnrichedUnionSchema,
+  )
   const patchStream = useCallback((patch: Partial<WizardState['stream']>) => {
     setState((prev) => (prev ? { ...prev, stream: { ...prev.stream, ...patch } } : prev))
   }, [])
@@ -344,6 +361,7 @@ export function StreamEditWizardPage() {
           actualRequestSent: null,
           s3ConnectivityPassed: false,
           remoteProbe: null,
+          dbConnectivityPassed: false,
         },
       }
     })
@@ -367,8 +385,11 @@ export function StreamEditWizardPage() {
   const setUnmappedFieldsPolicy = useCallback((unmappedFieldsPolicy: WizardState['unmappedFieldsPolicy']) => {
     setState((prev) => (prev ? { ...prev, unmappedFieldsPolicy } : prev))
   }, [])
-  const setDataProtection = useCallback((dataProtection: WizardState['dataProtection']) => {
-    setState((prev) => (prev ? { ...prev, dataProtection } : prev))
+  const setDataProtection = useCallback((patch: Partial<WizardState['dataProtection']>) => {
+    setState((prev) => (prev ? { ...prev, dataProtection: { ...prev.dataProtection, ...patch } } : prev))
+  }, [])
+  const setDataPolicy = useCallback((patch: Partial<WizardState['dataPolicy']>) => {
+    setState((prev) => (prev ? { ...prev, dataPolicy: { ...prev.dataPolicy, ...patch } } : prev))
   }, [])
   const setDestinations = useCallback((patch: Partial<WizardState['destinations']>) => {
     setState((prev) => {
@@ -417,7 +438,7 @@ export function StreamEditWizardPage() {
       if (!prev) return prev
       return {
         ...prev,
-        destinations: refreshed.destinations,
+        destinations: preserveWizardRouteProcessingDrafts(refreshed.destinations, prev.destinations),
         outcome: {
           ...prev.outcome,
           routeId: refreshed.routeIds[0] ?? prev.outcome?.routeId ?? null,
@@ -456,7 +477,10 @@ export function StreamEditWizardPage() {
             if (!prev) return prev
             const next = {
               ...prev,
-              destinations: refreshedDestinations.destinations,
+              destinations: preserveWizardRouteProcessingDrafts(
+                refreshedDestinations.destinations,
+                prev.destinations,
+              ),
               outcome: {
                 ...prev.outcome,
                 routeId: refreshedDestinations.routeIds[0] ?? prev.outcome?.routeId ?? null,
@@ -747,6 +771,7 @@ export function StreamEditWizardPage() {
             onChangeEnrichment={setEnrichment}
             onChangeUnmappedFieldsPolicy={setUnmappedFieldsPolicy}
             onChangeDataProtection={setDataProtection}
+            onChangeDataPolicy={setDataPolicy}
             onChangeDestinations={setDestinations}
             dataProtectionDrawerOpen={dataProtectionDrawerOpen}
             onDataProtectionDrawerOpenChange={setDataProtectionDrawerOpen}

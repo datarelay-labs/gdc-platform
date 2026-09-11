@@ -4,7 +4,9 @@ import {
   normalizeUnknownNormalFieldPolicy,
   normalizeUnknownSensitiveFieldPolicy,
   normalizeWizardDestinations,
+  normalizeWizardPolicyLevelResponse,
   normalizeWizardProtectionAction,
+  normalizeWizardRouteClassificationOverride,
   normalizeWizardRouteProtectionOverride,
   WIZARD_STEP_KEYS,
   type WizardLegacySubstepKey,
@@ -49,7 +51,16 @@ function hydrateWizardState(raw: Partial<WizardState> | undefined): WizardState 
     stream: { ...base.stream, ...raw.stream },
     apiTest: { ...base.apiTest, ...raw.apiTest },
     destinations: normalizeWizardDestinations(raw.destinations),
-    dataPolicy: { ...base.dataPolicy, ...raw.dataPolicy },
+    dataPolicy: {
+      ...base.dataPolicy,
+      ...raw.dataPolicy,
+      restrictedResponse: normalizeWizardPolicyLevelResponse(
+        raw.dataPolicy?.restrictedResponse ?? base.dataPolicy.restrictedResponse,
+      ),
+      confidentialResponse: normalizeWizardPolicyLevelResponse(
+        raw.dataPolicy?.confidentialResponse ?? base.dataPolicy.confidentialResponse,
+      ),
+    },
     dataProtection: {
       ...base.dataProtection,
       ...raw.dataProtection,
@@ -70,6 +81,11 @@ function hydrateWizardState(raw: Partial<WizardState> | undefined): WizardState 
       routeOverrides: Array.isArray(raw.dataProtection?.routeOverrides)
         ? raw.dataProtection.routeOverrides.map((override) => normalizeWizardRouteProtectionOverride(override))
         : base.dataProtection.routeOverrides,
+      routeClassificationOverrides: Array.isArray(raw.dataProtection?.routeClassificationOverrides)
+        ? raw.dataProtection.routeClassificationOverrides.map((override) =>
+            normalizeWizardRouteClassificationOverride(override),
+          )
+        : base.dataProtection.routeClassificationOverrides,
     },
     mapping: Array.isArray(raw.mapping) ? raw.mapping : base.mapping,
     enrichment: Array.isArray(raw.enrichment) ? raw.enrichment : base.enrichment,

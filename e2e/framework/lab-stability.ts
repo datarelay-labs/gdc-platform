@@ -77,12 +77,15 @@ try:
 except Exception:
     pass
 src = Path(os.environ["FIXTURE_S3_DIR"])
+prefix = os.environ.get("S3_PREFIX") or "full-e2e/"
+if not prefix.endswith("/"):
+    prefix += "/"
 mapping = {
-    "init.ndjson": "full-e2e/init.ndjson",
-    "new.ndjson": "full-e2e/new.ndjson",
-    "dup.ndjson": "full-e2e/dup.ndjson",
-    "invalid.ndjson": "full-e2e/invalid.ndjson",
-    "nested.json": "full-e2e/nested.json",
+    "init.ndjson": prefix + "init.ndjson",
+    "new.ndjson": prefix + "new.ndjson",
+    "dup.ndjson": prefix + "dup.ndjson",
+    "invalid.ndjson": prefix + "invalid.ndjson",
+    "nested.json": prefix + "nested.json",
 }
 keys = []
 for name, key in mapping.items():
@@ -98,6 +101,7 @@ print(",".join(keys))
       MINIO_ACCESS: env.minioAccessKey,
       MINIO_SECRET: env.minioSecretKey,
       MINIO_BUCKET: env.minioBucket,
+      S3_PREFIX: env.s3Prefix,
       FIXTURE_S3_DIR: fixtureDir,
     },
     encoding: 'utf-8',

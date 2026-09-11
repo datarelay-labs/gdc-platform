@@ -15,11 +15,13 @@ from app.connectors.models import Connector
 from app.database import get_db, get_db_read_bounded
 from app.destinations.models import Destination
 from app.enrichments.models import Enrichment
-from app.main import app
 from app.mappings.models import Mapping
 from app.routes.models import Route
 from app.sources.models import Source
 from app.streams.models import Stream
+from tests.ai_gateway_http import build_ai_gateway_test_app
+
+app = build_ai_gateway_test_app()
 
 
 @pytest.fixture

@@ -1,7 +1,7 @@
 import { GDC_DEFAULT_READ_JSON_TIMEOUT_MS, requestJson, safeRequestJson } from '../api'
 import { GDC_API_PREFIX } from './gdcApiPrefix'
 import { readJsonWithSignal, type GdcSignalOptions } from './gdcSignalOptions'
-import type { PolicyActionType, PolicyRule } from './gdcPolicy'
+import type { PolicyActionType, PolicyConditionJson, PolicyRule } from './gdcPolicy'
 
 const RT = `${GDC_API_PREFIX}/runtime`
 
@@ -43,7 +43,7 @@ export async function createRoutePolicyRule(
   body: {
     name: string
     enabled?: boolean
-    condition_json: { sensitivity_class: string }
+    condition_json: PolicyConditionJson
     action_type?: PolicyActionType
   },
 ): Promise<{ rule: RoutePolicyRule } | null> {
@@ -60,7 +60,7 @@ export async function patchRoutePolicyRule(
   body: {
     name?: string
     enabled?: boolean
-    condition_json?: { sensitivity_class: string }
+    condition_json?: PolicyConditionJson
     action_type?: PolicyActionType
   },
 ): Promise<{ rule: RoutePolicyRule } | null> {

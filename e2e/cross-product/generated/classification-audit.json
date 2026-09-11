@@ -1,8 +1,8 @@
 {
   "equation": "candidates = valid + not_applicable + not_implemented_combinations",
   "candidates": 40428,
-  "valid": 32184,
-  "not_applicable": 8244,
+  "valid": 35484,
+  "not_applicable": 4944,
   "not_implemented_combinations": 0,
   "candidate_emissions": 42228,
   "duplicate_emissions": 1800,

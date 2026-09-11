@@ -2,9 +2,13 @@ DATA RELAY GOVERNANCE & TRANSFORM POLICY DRAFT
 
 Version 1.0 (Draft)
 
+Status: CURRENT for Unknown Field / Schema Drift / Governance-optional policy.
+Wizard step order in later Destination First section is authoritative.
+Do not treat early "Wizard v3" wording as a 6-step or Transform-first wizard.
+
 목적
 
-본 문서는 Stream Wizard v3 설계 과정에서 도출된 정책을 정리한 문서이다.
+본 문서는 Stream Wizard 설계 과정에서 도출된 정책을 정리한 문서이다.
 
 특히 아래 영역에 대한 제품 방향을 정의한다.
 

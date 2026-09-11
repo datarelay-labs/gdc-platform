@@ -1,4 +1,5 @@
 import type { MappingUIConfigResponse, StreamRead } from '../api/types/gdcApi'
+import { firstNonEmptySourceType, normalizeGdcStreamSourceType } from './sourceTypePresentation'
 
 export function resolveStreamEndpointPath(
   configJson: Record<string, unknown> | null | undefined,
@@ -22,7 +23,8 @@ export function resolveStreamEndpointPath(
 
 /**
  * Build `stream_config` for `POST /runtime/api-test/http` from persisted stream + mapping-ui rows.
- * Mirrors {@link StreamApiTestPage} load logic so Mapping and API Test stay aligned.
+ * Shared by Wizard sample, Mapping source sample, and standalone Stream Test so the same
+ * saved stream + source type produces the same runtime preview contract.
  */
 export function buildStreamHttpConfigFromStreamRead(
   stream: StreamRead,
@@ -30,6 +32,40 @@ export function buildStreamHttpConfigFromStreamRead(
 ): Record<string, unknown> {
   const sc = cfg.source_config ?? {}
   const cfgj = (stream.config_json ?? {}) as Record<string, unknown>
+  const sourceType = normalizeGdcStreamSourceType(
+    firstNonEmptySourceType(cfg.source_type, stream.source_type, stream.stream_type),
+  )
+  if (sourceType === 'S3_OBJECT_POLLING') {
+    const rawMax = cfgj.max_objects_per_run
+    const maxObjects =
+      typeof rawMax === 'number' && Number.isFinite(rawMax)
+        ? rawMax
+        : typeof rawMax === 'string' && rawMax.trim()
+          ? Number.parseInt(rawMax.trim(), 10) || 20
+          : 20
+    return { max_objects_per_run: Math.max(1, Math.floor(maxObjects)) }
+  }
+  if (sourceType === 'REMOTE_FILE_POLLING') {
+    return {
+      remote_directory: String(cfgj.remote_directory ?? sc.remote_directory ?? '').trim(),
+      file_pattern: String(cfgj.file_pattern ?? sc.file_pattern ?? '*').trim() || '*',
+      recursive: Boolean(cfgj.recursive ?? sc.recursive ?? false),
+      parser_type: cfgj.parser_type ?? sc.parser_type,
+      max_files_per_run: cfgj.max_files_per_run ?? sc.max_files_per_run ?? 10,
+      max_file_size_mb: cfgj.max_file_size_mb ?? sc.max_file_size_mb ?? 5,
+      encoding: cfgj.encoding ?? sc.encoding ?? 'utf-8',
+      csv_delimiter: cfgj.csv_delimiter ?? sc.csv_delimiter,
+      line_event_field: cfgj.line_event_field ?? sc.line_event_field,
+      include_file_metadata: cfgj.include_file_metadata ?? sc.include_file_metadata,
+    }
+  }
+  if (sourceType === 'DATABASE_QUERY') {
+    const query = String(cfgj.query ?? sc.query ?? '').trim()
+    const out: Record<string, unknown> = { query }
+    const timeout = cfgj.query_timeout_seconds ?? sc.query_timeout_seconds ?? cfgj.timeout_seconds
+    if (timeout != null) out.query_timeout_seconds = timeout
+    return out
+  }
   const ep = resolveStreamEndpointPath(cfgj, sc)
   const m = String(cfgj.method ?? cfgj.http_method ?? (sc as { http_method?: string }).http_method ?? 'GET').toUpperCase()
   const method = m === 'POST' ? 'POST' : 'GET'

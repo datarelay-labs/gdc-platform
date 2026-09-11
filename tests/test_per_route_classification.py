@@ -287,7 +287,11 @@ def test_route_classification_metrics(
         webhook_sender=_FakeWebhookSender(),
     )
     summary = runner.run(ctx, db=db)
-    assert summary.get("route_classification_count") == 1
+    assert summary.get("route_classification_count") == 0
+    assert summary.get("route_classification_attempt_count") == 0
+    assert summary.get("route_classification_success_count") == 0
+    assert summary.get("route_classification_failure_count") == 0
+    assert summary.get("route_classification_skipped_count") == 1
     assert summary.get("route_classification_duration_ms") is not None
 
 
@@ -310,8 +314,17 @@ def test_process_routes_classification_metrics(classification_enabled: None) -> 
     shared = _minimal_shared()
     route_ctx = _minimal_route_ctx()
     pipeline = process_routes([route_ctx], shared)
-    assert pipeline.metrics.route_classification_count == 1
+    assert pipeline.metrics.route_classification_count == 0
+    assert pipeline.metrics.route_classification_attempt_count == 0
+    assert pipeline.metrics.route_classification_success_count == 0
+    assert pipeline.metrics.route_classification_failure_count == 0
+    assert pipeline.metrics.route_classification_skipped_count == 1
     assert pipeline.metrics.route_classification_duration_ms >= 0
+    assert pipeline.metrics.route_classification_operations_applied == 0
+    metrics_result = pipeline.stage_results[0].classification_metrics
+    assert metrics_result is not None
+    assert metrics_result.outcome == "skipped"
+    assert metrics_result.skip_reason == "no_effective_classification"
 
 
 def test_has_active_classification_route_overrides() -> None:

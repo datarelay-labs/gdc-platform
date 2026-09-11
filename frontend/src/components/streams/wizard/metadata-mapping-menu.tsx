@@ -1,4 +1,4 @@
-import { AlertTriangle, ChevronDown, Database, Layers, Loader2, ShieldCheck, Sparkles } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Layers, Loader2, ShieldCheck, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '../../../lib/utils'
@@ -39,8 +39,6 @@ import {
  *   └─ popover
  *       Schema target
  *         ◉ Stellar Cyber           (active)
- *         ○ Common SIEM             Coming soon
- *         ○ Generic ECS             Coming soon
  *
  *       [Generate / Refresh suggestions]
  *
@@ -55,10 +53,9 @@ type MetadataMappingMenuProps = {
 }
 
 type SchemaTarget = {
-  id: 'stellar' | 'siem' | 'ecs'
+  id: 'stellar'
   label: string
   description: string
-  enabled: boolean
 }
 
 const SCHEMA_TARGETS: ReadonlyArray<SchemaTarget> = [
@@ -66,19 +63,6 @@ const SCHEMA_TARGETS: ReadonlyArray<SchemaTarget> = [
     id: 'stellar',
     label: 'Stellar Cyber',
     description: 'Stellar Cyber Interflow metadata schema (active).',
-    enabled: true,
-  },
-  {
-    id: 'siem',
-    label: 'Common SIEM',
-    description: 'Common SIEM normalization (coming soon).',
-    enabled: false,
-  },
-  {
-    id: 'ecs',
-    label: 'Generic ECS',
-    description: 'Elastic Common Schema (coming soon).',
-    enabled: false,
   },
 ]
 
@@ -118,7 +102,6 @@ export function MetadataMappingMenu({ state, onChangeMapping }: MetadataMappingM
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const [open, setOpen] = useState(false)
   const [coords, setCoords] = useState<PopoverCoords>(null)
-  const [target, setTarget] = useState<SchemaTarget['id']>('stellar')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [suggestions, setSuggestions] = useState<SuggestionRow[] | null>(null)
@@ -279,57 +262,34 @@ export function MetadataMappingMenu({ state, onChangeMapping }: MetadataMappingM
                 Schema target
               </p>
               <ul className="mt-1.5 space-y-1">
-                {SCHEMA_TARGETS.map((t) => {
-                  const selected = target === t.id
-                  return (
+                {SCHEMA_TARGETS.map((t) => (
                     <li key={t.id}>
-                      <button
-                        type="button"
-                        disabled={!t.enabled}
-                        onClick={() => setTarget(t.id)}
+                      <div
                         className={cn(
-                          'flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left transition-colors',
-                          selected
-                            ? 'border-violet-400 bg-violet-50 dark:border-violet-500/60 dark:bg-violet-500/10'
-                            : 'border-slate-200/80 bg-white hover:bg-slate-50 dark:border-gdc-border dark:bg-gdc-section dark:hover:bg-gdc-rowHover',
-                          !t.enabled && 'cursor-not-allowed opacity-60',
+                          'flex w-full items-start gap-2 rounded-md border px-2 py-1.5 text-left',
+                          'border-violet-400 bg-violet-50 dark:border-violet-500/60 dark:bg-violet-500/10',
                         )}
                       >
                         <span
-                          className={cn(
-                            'mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border',
-                            selected
-                              ? 'border-violet-600 bg-violet-600'
-                              : 'border-slate-300 bg-white dark:border-gdc-border dark:bg-gdc-section',
-                          )}
+                          className="mt-0.5 inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-violet-600 bg-violet-600"
                           aria-hidden
                         >
-                          {selected ? <span className="h-1.5 w-1.5 rounded-full bg-white" /> : null}
+                          <span className="h-1.5 w-1.5 rounded-full bg-white" />
                         </span>
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-1.5">
-                            {t.id === 'stellar' ? (
-                              <ShieldCheck className="h-3 w-3 text-violet-600 dark:text-violet-300" aria-hidden />
-                            ) : (
-                              <Database className="h-3 w-3 text-slate-400" aria-hidden />
-                            )}
+                            <ShieldCheck className="h-3 w-3 text-violet-600 dark:text-violet-300" aria-hidden />
                             <span className="text-[12px] font-semibold text-slate-800 dark:text-slate-100">
                               {t.label}
                             </span>
-                            {!t.enabled ? (
-                              <span className="ml-auto inline-flex items-center rounded-full border border-slate-200/90 bg-slate-100 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-slate-500 dark:border-gdc-border dark:bg-gdc-section dark:text-gdc-mutedStrong">
-                                Soon
-                              </span>
-                            ) : null}
                           </span>
                           <span className="block text-[10px] leading-snug text-slate-500 dark:text-gdc-muted">
                             {t.description}
                           </span>
                         </span>
-                      </button>
+                      </div>
                     </li>
-                  )
-                })}
+                ))}
               </ul>
 
               <div className="mt-3 border-t border-slate-200/70 pt-2 dark:border-gdc-border">

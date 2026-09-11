@@ -12,14 +12,18 @@ describe('source-product-group', () => {
     expect(resolveSourceProductLabel('')).toBe('Other sources')
   })
 
-  it('groups rows by product_group metadata and computes worst status', () => {
+  it('groups Office365 and AWS by product_group and inherits worst stream health', () => {
     const groups = groupRowsBySourceProduct([
-      { connectorName: 'misc', connectorProductGroup: 'Okta', status: 'RUNNING' },
-      { connectorName: 'other', connectorProductGroup: 'Okta', status: 'ERROR' },
+      { connectorName: 'o365-a', connectorProductGroup: 'Office365', status: 'RUNNING' },
+      { connectorName: 'o365-b', connectorProductGroup: 'Office365', status: 'DEGRADED' },
+      { connectorName: 'aws-a', connectorProductGroup: 'AWS', status: 'RUNNING' },
     ])
-    expect(groups).toHaveLength(1)
-    expect(groups[0].productLabel).toBe('Okta')
-    expect(groups[0].issueCount).toBe(1)
-    expect(worstStreamStatus(['RUNNING', 'ERROR'])).toBe('ERROR')
+    const byLabel = Object.fromEntries(groups.map((g) => [g.productLabel, g]))
+    expect(byLabel.Office365?.worstStatus).toBe('DEGRADED')
+    expect(byLabel.Office365?.issueCount).toBe(1)
+    expect(byLabel.Office365?.rows).toHaveLength(2)
+    expect(byLabel.AWS?.worstStatus).toBe('RUNNING')
+    expect(byLabel.AWS?.issueCount).toBe(0)
+    expect(byLabel.AWS?.rows).toHaveLength(1)
   })
 })

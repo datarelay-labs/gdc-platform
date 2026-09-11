@@ -2,8 +2,8 @@
 
 **Document:** `DATA-RELAY-ROUTE-PROCESSING-UX-SPEC.md`  
 **Version:** 1.3  
-**Status:** Draft — UX authority for Route Processing (Wizard, Stream Edit, Route Edit, Governance Workspace)  
-**Date:** 2026-06-19  
+**Status:** CURRENT — UX authority for Route Processing (Wizard, Stream Edit, Route Edit, Governance Workspace)  
+**Date:** 2026-06-19; persist kinds updated 2026-08-13  
 **Related:** `specs/091-route-processing-architecture/spec.md`, `specs/092-per-route-transform/spec.md`, `specs/093-per-route-protection/spec.md`, `specs/094-per-route-classification/spec.md`, `specs/095-per-route-policy/spec.md`, `specs/096-route-runtime-delivery/spec.md`
 
 ---
@@ -1002,14 +1002,16 @@ Deploy Summary, Route Health Cards, and projected count lists must be labeled as
 ```text
 projectRouteProcessingStatusFromDeployIntent(draft, dataProtection)
   → statuses: Inherited | Overridden | Mixed (per concern)
-  → persistKind: none | intent_only | governance
+  → persistKind: none | intent_only | governance | route_transform | route_protection
 ```
 
 | `persistKind` | Operator label | Meaning |
 |---------------|----------------|---------|
 | **none** | — | Shared Processing only; no route-level deploy intent. |
-| **intent_only** | Intent only | Shown in Deploy but **not saved** at deploy for that concern bundle (e.g. full route transform override). Post-deploy Effective API may show Shared. |
-| **governance** | Persisted through governance rules | Field-level protection/classification overrides saved via governance `route_overrides` at deploy. |
+| **intent_only** | Intent only | Incomplete override; shown in Deploy but **not saved** for that concern. |
+| **governance** | Persisted through governance rules | Field-level protection/classification/policy overrides saved via governance `route_overrides` at deploy. |
+| **route_transform** | Persisted through route transform | Route mapping/enrichment bundle saved at deploy. |
+| **route_protection** | Persisted through route protection | Route protection intents saved at deploy. |
 
 ## Deploy Summary display rules
 
@@ -1021,7 +1023,7 @@ projectRouteProcessingStatusFromDeployIntent(draft, dataProtection)
 
 ## Copy constraints
 
-Allowed: Deploy Intent, Projected Status, Intent only, Persisted through governance rules.
+Allowed: Deploy Intent, Projected Status, Intent only, Persisted through governance rules, Persisted through route transform, Persisted through route protection.
 
 Forbidden in operator copy: Runtime Resolver, Persist Layer, Database Row, Internal Engine.
 

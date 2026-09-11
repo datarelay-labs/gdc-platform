@@ -284,7 +284,7 @@ def test_invalid_action_types_rejected_via_api(
         "enabled": True,
         "condition_json": {"sensitivity_class": "secret"},
     }
-    for action in ("block", "drop", "route"):
+    for action in ("drop", "route"):
         resp = policy_api_client.post(
             f"/api/v1/runtime/streams/{stream_id}/policy-rules",
             json={**base, "action_type": action},
@@ -297,6 +297,30 @@ def test_invalid_action_types_rejected_via_api(
     )
     assert ok.status_code == 200
     assert ok.json()["rule"]["action_type"] == "quarantine"
+
+    blocked = policy_api_client.post(
+        f"/api/v1/runtime/streams/{stream_id}/policy-rules",
+        json={
+            **base,
+            "name": "Block OK",
+            "condition_json": {"classification_level": "CONFIDENTIAL"},
+            "action_type": "block",
+        },
+    )
+    assert blocked.status_code == 200
+    assert blocked.json()["rule"]["action_type"] == "block"
+
+    review = policy_api_client.post(
+        f"/api/v1/runtime/streams/{stream_id}/policy-rules",
+        json={
+            **base,
+            "name": "Review OK",
+            "condition_json": {"classification_level": "RESTRICTED"},
+            "action_type": "require_review",
+        },
+    )
+    assert review.status_code == 200
+    assert review.json()["rule"]["action_type"] == "require_review"
 
 
 def test_load_cumulative_policy_totals_from_latest(db_session: Session) -> None:

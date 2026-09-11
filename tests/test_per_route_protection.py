@@ -253,6 +253,10 @@ def test_fanout_protected_payload_per_route(db_session: Session, monkeypatch: py
 
     assert captured[route_a][0]["message"] != "hello@example.com"
     assert captured[route_b][0]["message"] == "hello@example.com"
+    last = (
+        db.query(Checkpoint).filter_by(stream_id=stream_id).one().checkpoint_value_json or {}
+    ).get("last_success_event") or {}
+    assert last.get("message") == "hello@example.com"
 
 
 def test_feature_flag_off_parity_with_protection_rules(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -328,7 +332,44 @@ def test_route_protection_metrics(db_session: Session, monkeypatch: pytest.Monke
         webhook_sender=_FakeWebhookSender(),
     )
     summary = runner.run(ctx, db=db)
+    assert summary.get("route_protection_count") == 0
+    assert summary.get("route_protection_attempt_count") == 0
+    assert summary.get("route_protection_success_count") == 0
+    assert summary.get("route_protection_failure_count") == 0
+    assert summary.get("route_protection_skipped_count") == 1
+    assert summary.get("route_protection_operations_applied") == 0
+    assert summary.get("route_protection_duration_ms") is not None
+
+
+def test_route_protection_metrics_runtime_inherit(db_session: Session, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "GDC_ROUTE_PROCESSING_ENABLED", True)
+    monkeypatch.setattr(settings, "GDC_PROTECTION_ENABLED", True)
+    db = db_session
+    fixture = _seed_stream_runtime(db)
+    stream_id = fixture["stream_id"]
+    db.add(
+        StreamProtectionRule(
+            stream_id=stream_id,
+            field_path="$.message",
+            sensitivity_class=SENSITIVITY_CLASS_PII,
+            protection_mode=PROTECTION_MODE_FULL_MASK,
+            enabled=True,
+            created_by="test",
+        )
+    )
+    db.commit()
+    ctx = load_stream_context(db, stream_id)
+    runner = _build_runner(
+        poller=_FakePoller(response={"items": [{"id": "e1", "message": "secret-text", "vendor": "acme"}]}),
+        webhook_sender=_FakeWebhookSender(),
+    )
+    summary = runner.run(ctx, db=db)
+    assert summary.get("route_protection_attempt_count") == 1
+    assert summary.get("route_protection_success_count") == 1
+    assert summary.get("route_protection_failure_count") == 0
+    assert summary.get("route_protection_skipped_count") == 0
     assert summary.get("route_protection_count") == 1
+    assert summary.get("route_protection_operations_applied") == 1
     assert summary.get("route_protection_duration_ms") is not None
 
 

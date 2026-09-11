@@ -549,3 +549,108 @@ def test_duplicate_classification_override_rejected(
     assert put.status_code == 422
     detail = _api_detail(put.json())
     assert detail["error_code"] == "INVALID_ROUTE_OVERRIDE_DUPLICATE"
+
+
+def test_policy_only_delivery_behavior_override_accepted(
+    governance_client: TestClient,
+    db_session: Session,
+) -> None:
+    fixture = _seed_stream_runtime(db_session)
+    stream_id = fixture["stream_id"]
+    route_id = fixture["route_ids"][0]
+
+    put = _put_governance(
+        governance_client,
+        stream_id,
+        {
+            "enabled": True,
+            "rules": [],
+            "route_overrides": [
+                {"route_id": route_id, "delivery_behavior": "quarantine", "enabled": True},
+            ],
+        },
+    )
+    assert put.status_code == 200
+    body = put.json()
+    assert len(body["route_overrides"]) == 1
+    assert body["route_overrides"][0]["delivery_behavior"] == "quarantine"
+    assert body["route_overrides"][0]["classification_level"] is None
+    assert body["route_overrides"][0]["protection_action"] is None
+
+
+def test_classification_only_override_still_accepted(
+    governance_client: TestClient,
+    db_session: Session,
+) -> None:
+    fixture = _seed_stream_runtime(db_session)
+    stream_id = fixture["stream_id"]
+    route_id = fixture["route_ids"][0]
+
+    put = _put_governance(
+        governance_client,
+        stream_id,
+        {
+            "enabled": True,
+            "rules": [],
+            "route_overrides": [
+                {"route_id": route_id, "classification_level": "RESTRICTED", "enabled": True},
+            ],
+        },
+    )
+    assert put.status_code == 200
+    assert put.json()["route_overrides"][0]["classification_level"] == "RESTRICTED"
+
+
+def test_combined_classification_and_policy_override_accepted(
+    governance_client: TestClient,
+    db_session: Session,
+) -> None:
+    fixture = _seed_stream_runtime(db_session)
+    stream_id = fixture["stream_id"]
+    route_id = fixture["route_ids"][0]
+
+    put = _put_governance(
+        governance_client,
+        stream_id,
+        {
+            "enabled": True,
+            "rules": [],
+            "route_overrides": [
+                {"route_id": route_id, "classification_level": "RESTRICTED", "enabled": True},
+                {"route_id": route_id, "delivery_behavior": "block", "enabled": True},
+            ],
+        },
+    )
+    assert put.status_code == 200
+    overrides = put.json()["route_overrides"]
+    assert len(overrides) == 2
+    assert {item.get("classification_level") for item in overrides} == {"RESTRICTED", None}
+    assert {item.get("delivery_behavior") for item in overrides} == {None, "block"}
+
+
+def test_protection_override_still_accepted(
+    governance_client: TestClient,
+    db_session: Session,
+) -> None:
+    fixture = _seed_stream_runtime(db_session)
+    stream_id = fixture["stream_id"]
+    route_id = fixture["route_ids"][0]
+
+    put = _put_governance(
+        governance_client,
+        stream_id,
+        {
+            "enabled": True,
+            "rules": [],
+            "route_overrides": [
+                {
+                    "field_path": "$.email",
+                    "route_id": route_id,
+                    "protection_action": "mask_partial",
+                    "enabled": True,
+                },
+            ],
+        },
+    )
+    assert put.status_code == 200
+    assert put.json()["route_overrides"][0]["protection_action"] == "mask_partial"

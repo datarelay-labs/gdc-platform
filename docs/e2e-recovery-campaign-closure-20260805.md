@@ -1,5 +1,10 @@
 # E2E Recovery Campaign Closure (2026-08-05)
 
+**Status:** ARCHIVE_CANDIDATE  
+**Superseded By:** [`docs/architecture/source-of-truth-index.md`](architecture/source-of-truth-index.md)
+
+E2E recovery campaign record. Not Wizard / Route Processing Source of Truth.
+
 ## Final verdict
 
 ```text

@@ -92,6 +92,9 @@ export type HttpApiTestResponse = {
   analysis?: HttpApiTestAnalysisPayload | null
   database_query_row_count?: number | null
   database_query_sample_rows?: Array<Record<string, unknown>> | null
+  remote_file_event_count?: number | null
+  s3_event_count?: number | null
+  s3_sample_keys?: string[] | null
 }
 
 /**
@@ -416,6 +419,35 @@ export type TransformPreviewResponse = {
 
 export async function runTransformPreview(payload: TransformPreviewRequest): Promise<TransformPreviewResponse> {
   return requestJson<TransformPreviewResponse>(`${RT}/preview/transform`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export type SensitiveSuggestion = {
+  field_path: string
+  suggested_sensitive_type: string
+  sensitivity_class: string
+  detection_method: string
+  matched_rule?: string | null
+  detection_source: string
+  confidence?: string | null
+}
+
+export type SensitiveDetectionPreviewRequest = {
+  events: Array<Record<string, unknown>>
+}
+
+export type SensitiveDetectionPreviewResponse = {
+  suggestions: SensitiveSuggestion[]
+  suggestion_count: number
+  auto_protection_applied: boolean
+}
+
+export async function runSensitiveDetectionPreview(
+  payload: SensitiveDetectionPreviewRequest,
+): Promise<SensitiveDetectionPreviewResponse> {
+  return requestJson<SensitiveDetectionPreviewResponse>(`${RT}/preview/sensitive-detection`, {
     method: 'POST',
     body: JSON.stringify(payload),
   })

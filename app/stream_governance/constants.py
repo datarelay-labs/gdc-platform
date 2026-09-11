@@ -18,6 +18,7 @@ ALLOWED_DELIVERY_BEHAVIORS = frozenset(
         "continue",
         "quarantine",
         "block",
+        "require_review",
     }
 )
 

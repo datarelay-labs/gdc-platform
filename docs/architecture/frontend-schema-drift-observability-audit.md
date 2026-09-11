@@ -1,5 +1,8 @@
 # Frontend Schema Drift Observability Audit
 
+**Status:** ARCHIVE_CANDIDATE (point-in-time audit)  
+**Superseded By:** [`source-of-truth-index.md`](source-of-truth-index.md), [`DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md`](../ux/DATA-RELAY-SCHEMA-DRIFT-POLICY-RUNTIME-SPEC.md)
+
 **Date:** 2026-06-17  
 **Branch:** `feature/sensitive-detection-m5-clean` (synced with `origin` at `e91515a`)  
 **Baseline:** Commit A pushed (`e91515a` — backend schema drift observability regression tests, 29/29)  

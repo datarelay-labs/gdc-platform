@@ -18,8 +18,10 @@ from app.ai_streams.models import AiStream
 from app.auth.jwt_service import issue_access_token
 from app.database import get_db, get_db_read_bounded
 from app.logs.models import DeliveryLog
-from app.main import app
+from tests.ai_gateway_http import build_ai_gateway_test_app
 from tests.test_ai_proxy_receiver import _seed_ai_proxy_stack
+
+app = build_ai_gateway_test_app()
 
 
 @pytest.fixture

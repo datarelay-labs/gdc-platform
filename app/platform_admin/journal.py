@@ -5,11 +5,15 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from app.audit.service import record_audit_log
 from app.platform_admin.models import PlatformAuditEvent, PlatformConfigVersion
+
+# Serialize monotonic version allocation across concurrent config mutations.
+# Unlocked max(version)+1 races on platform_config_versions.version (UniqueViolation → HTTP 500).
+_CONFIG_VERSION_ADVISORY_LOCK_KEY = "gdc:platform_config_versions.version"
 
 
 def record_audit_event(
@@ -68,6 +72,12 @@ def record_config_version(
     snapshot_before: dict[str, Any] | None = None,
     snapshot_after: dict[str, Any] | None = None,
 ) -> int:
+    bind = db.get_bind()
+    if bind is not None and bind.dialect.name == "postgresql":
+        db.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:lock_key))"),
+            {"lock_key": _CONFIG_VERSION_ADVISORY_LOCK_KEY},
+        )
     cur = db.scalar(select(func.coalesce(func.max(PlatformConfigVersion.version), 0)))
     nxt = int(cur or 0) + 1
     db.add(

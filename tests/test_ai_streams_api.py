@@ -12,9 +12,11 @@ from app.ai_providers.models import AiProvider
 from app.auth.jwt_service import issue_access_token
 from app.connectors.models import Connector
 from app.database import get_db, get_db_read_bounded
-from app.main import app
 from app.sources.models import Source
 from app.streams.models import Stream
+from tests.ai_gateway_http import build_ai_gateway_test_app
+
+app = build_ai_gateway_test_app()
 
 
 @pytest.fixture

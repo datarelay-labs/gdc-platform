@@ -119,7 +119,7 @@ export function DynamicRoutingPanel({
             <tr className={opThRow}>
               <th className={opTh}>Name</th>
               <th className={opTh}>Condition</th>
-              <th className={opTh}>Destination</th>
+              <th className={opTh}>Route</th>
               <th className={opTh}>Enabled</th>
             </tr>
           </thead>
@@ -135,9 +135,15 @@ export function DynamicRoutingPanel({
                 <tr key={rule.id} className={opTr} data-testid={`dynamic-route-row-${rule.id}`}>
                   <td className={opTd}>{rule.name}</td>
                   <td className={cn(opTd, 'font-mono text-[10px]')}>
-                    {rule.condition_json?.sensitivity_class ?? '—'}
+                    {rule.condition_json?.sensitivity_class
+                      ?? rule.condition_json?.classification_level
+                      ?? '—'}
                   </td>
-                  <td className={opTd}>{rule.destination_name ?? rule.destination_id}</td>
+                  <td className={opTd}>
+                    {rule.route_name ?? (rule.route_id != null ? `Route #${rule.route_id}` : '—')}
+                    {' → '}
+                    {rule.destination_name ?? (rule.destination_id != null ? `Destination #${rule.destination_id}` : '—')}
+                  </td>
                   <td className={opTd}>{rule.enabled ? 'Yes' : 'No'}</td>
                 </tr>
               ))

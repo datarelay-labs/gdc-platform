@@ -64,6 +64,8 @@ export type StreamConsoleRow = {
   checkpointUpdatedAt: string
   checkpointLagLabel: string
   recentErrors: ReadonlyArray<{ message: string; relativeAt: string }>
+  /** Confirmed open schema field drifts from operational snapshot. */
+  openSchemaFieldDriftCount?: number
 }
 
 const flatSpark = [0, 0, 0, 0, 0, 0, 0] as const
@@ -379,6 +381,7 @@ export function enrichStreamRowFromOperationalSnapshot(
     recentErrors: kpi.lastErrorMessage
       ? [{ message: kpi.lastErrorMessage, relativeAt: kpi.lastErrorAt ?? '—' }]
       : base.recentErrors,
+    openSchemaFieldDriftCount: safeNonNegInt(snapshot.open_schema_field_drift_count ?? 0),
   }
 }
 

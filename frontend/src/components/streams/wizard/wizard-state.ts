@@ -119,8 +119,9 @@ export type WizardDataPolicyState = {
   maskPii: boolean
   defaultMaskMode: 'partial' | 'full' | 'tokenize'
   defaultClassification: string
-  restrictedResponse: 'quarantine' | 'block' | 'audit'
-  confidentialResponse: 'audit' | 'mask' | 'quarantine'
+  /** Policy / delivery control — never Protection actions (mask/tokenize/hash/remove). */
+  restrictedResponse: WizardPolicyDeliveryBehavior
+  confidentialResponse: WizardPolicyDeliveryBehavior
 }
 
 export const INITIAL_DATA_POLICY: WizardDataPolicyState = {
@@ -131,7 +132,7 @@ export const INITIAL_DATA_POLICY: WizardDataPolicyState = {
   defaultMaskMode: 'partial',
   defaultClassification: 'INTERNAL',
   restrictedResponse: 'quarantine',
-  confidentialResponse: 'audit',
+  confidentialResponse: 'continue',
 }
 
 export function dataPolicyPresetPatch(preset: WizardDataPolicyPreset): Partial<WizardDataPolicyState> {
@@ -142,8 +143,8 @@ export function dataPolicyPresetPatch(preset: WizardDataPolicyPreset): Partial<W
       dataShapeAlert: false,
       maskPii: false,
       defaultMaskMode: 'partial',
-      restrictedResponse: 'audit',
-      confidentialResponse: 'audit',
+      restrictedResponse: 'continue',
+      confidentialResponse: 'continue',
     }
   }
   if (preset === 'strict') {
@@ -164,7 +165,7 @@ export function dataPolicyPresetPatch(preset: WizardDataPolicyPreset): Partial<W
     maskPii: true,
     defaultMaskMode: 'partial',
     restrictedResponse: 'quarantine',
-    confidentialResponse: 'audit',
+    confidentialResponse: 'continue',
   }
 }
 
@@ -195,6 +196,23 @@ export function normalizeWizardProtectionAction(action: unknown): WizardProtecti
 
 /** Operator-facing delivery behavior when sensitive data is present. */
 export type WizardDeliveryBehavior = 'continue' | 'quarantine' | 'block'
+
+/** Route policy override — includes Require Review from the existing governance contract. */
+export type WizardPolicyDeliveryBehavior = WizardDeliveryBehavior | 'require_review'
+
+export function normalizeWizardPolicyDeliveryBehavior(value: unknown): WizardPolicyDeliveryBehavior {
+  if (value === 'quarantine' || value === 'block' || value === 'require_review') return value
+  // Legacy Policy UI "audit" meant Continue delivery (not a Protection action).
+  if (value === 'audit' || value === 'continue') return 'continue'
+  // Legacy "mask" meant "mask and deliver" — delivery Continues; Mask belongs to Protection.
+  if (value === 'mask') return 'continue'
+  return 'continue'
+}
+
+/** Normalize Shared/Route Policy level responses; never maps Protection actions into Policy silently as audit. */
+export function normalizeWizardPolicyLevelResponse(value: unknown): WizardPolicyDeliveryBehavior {
+  return normalizeWizardPolicyDeliveryBehavior(value)
+}
 
 export type WizardSensitivityClass = 'pii' | 'secret' | 'security_metadata'
 
@@ -304,6 +322,10 @@ export function newWizardRouteClassificationOverrideKey(): string {
   return `rco-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
 }
 
+export function newWizardRouteClassificationRuleKey(): string {
+  return `rcr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 const WIZARD_CLASSIFICATION_LEVELS = ['PUBLIC', 'INTERNAL', 'CONFIDENTIAL', 'RESTRICTED'] as const
 
 export function normalizeWizardClassificationLevel(value: unknown): WizardClassificationLevel {
@@ -323,6 +345,32 @@ export function normalizeWizardRouteClassificationOverride(
     classificationLevel: normalizeWizardClassificationLevel(raw.classificationLevel),
     enabled: raw.enabled !== false,
   }
+}
+
+export function normalizeWizardSensitivityClass(value: unknown): WizardSensitivityClass {
+  if (value === 'secret' || value === 'pii' || value === 'security_metadata') return value
+  return 'pii'
+}
+
+export function normalizeWizardRouteClassificationRuleDraft(
+  raw: Partial<WizardRouteClassificationRuleDraft>,
+): WizardRouteClassificationRuleDraft {
+  const sensitivityClass = normalizeWizardSensitivityClass(raw.sensitivityClass)
+  const name = String(raw.name ?? '').trim()
+  return {
+    key: raw.key || newWizardRouteClassificationRuleKey(),
+    name: name || `Wizard: ${sensitivityClass} classification`,
+    sensitivityClass,
+    classificationLevel: normalizeWizardClassificationLevel(raw.classificationLevel),
+    enabled: raw.enabled !== false,
+  }
+}
+
+export function normalizeWizardRouteClassificationOverrideState(
+  raw: Partial<WizardRouteClassificationOverrideState> | undefined,
+): WizardRouteClassificationOverrideState {
+  const rules = Array.isArray(raw?.rules) ? raw.rules : []
+  return { rules: rules.map((rule) => normalizeWizardRouteClassificationRuleDraft(rule)) }
 }
 
 export function normalizeWizardRouteProtectionOverride(
@@ -481,6 +529,8 @@ export type WizardConfigState = {
   /** REMOTE_FILE_POLLING: remote directory (required for sample fetch). */
   remoteDirectory: string
   filePattern: string
+  /** DATABASE_QUERY: SELECT-only SQL persisted as stream_config.query. */
+  sqlQuery: string
   remoteRecursive: boolean
   parserType: string
   maxFilesPerRun: number
@@ -583,6 +633,8 @@ export type WizardApiTestState = {
   s3ConnectivityPassed: boolean
   /** REMOTE_FILE_POLLING: last connector-auth probe (SSH/SFTP listing) before sample fetch. */
   remoteProbe?: ConnectorAuthTestResponse | null
+  /** DATABASE_QUERY: connectivity probe succeeded via connector-auth before query sample fetch. */
+  dbConnectivityPassed?: boolean
 }
 
 /**
@@ -641,18 +693,82 @@ export type WizardRouteProtectionOverrideState = Pick<
   'intents' | 'unknownNormalFieldPolicy' | 'unknownSensitiveFieldPolicy'
 >
 
-/** Route-level policy override draft (wizard intent only). */
+/** Route-level policy override draft. Per-level fields overlay shared dataPolicy; deliveryBehavior is the blanket governance override. */
 export type WizardRoutePolicyOverride = {
-  deliveryBehavior: WizardDeliveryBehavior
+  deliveryBehavior: WizardPolicyDeliveryBehavior
+  restrictedResponse?: WizardDataPolicyState['restrictedResponse']
+  confidentialResponse?: WizardDataPolicyState['confidentialResponse']
+}
+
+export function buildRoutePolicyOverrideFromGlobal(
+  dataPolicy?: Pick<WizardDataPolicyState, 'restrictedResponse' | 'confidentialResponse'>,
+): WizardRoutePolicyOverride {
+  const restrictedResponse = dataPolicy?.restrictedResponse
+  const confidentialResponse = dataPolicy?.confidentialResponse
+  let deliveryBehavior: WizardPolicyDeliveryBehavior = 'continue'
+  if (restrictedResponse === 'block') deliveryBehavior = 'block'
+  else if (restrictedResponse === 'quarantine') deliveryBehavior = 'quarantine'
+  return {
+    deliveryBehavior,
+    ...(restrictedResponse ? { restrictedResponse } : {}),
+    ...(confidentialResponse ? { confidentialResponse } : {}),
+  }
+}
+
+export function wizardRoutePolicyLevelDiffs(
+  shared: Pick<WizardDataPolicyState, 'restrictedResponse' | 'confidentialResponse'>,
+  override: WizardRoutePolicyOverride | undefined,
+): Array<'restricted' | 'confidential'> {
+  if (!override) return []
+  const diffs: Array<'restricted' | 'confidential'> = []
+  if (override.restrictedResponse && override.restrictedResponse !== shared.restrictedResponse) {
+    diffs.push('restricted')
+  }
+  if (override.confidentialResponse && override.confidentialResponse !== shared.confidentialResponse) {
+    diffs.push('confidential')
+  }
+  return diffs
+}
+
+export function mergeEffectiveWizardPolicy(
+  shared: Pick<WizardDataPolicyState, 'restrictedResponse' | 'confidentialResponse'>,
+  override: WizardRoutePolicyOverride | undefined,
+): Pick<WizardDataPolicyState, 'restrictedResponse' | 'confidentialResponse'> {
+  return {
+    restrictedResponse: override?.restrictedResponse ?? shared.restrictedResponse,
+    confidentialResponse: override?.confidentialResponse ?? shared.confidentialResponse,
+  }
+}
+
+/** Route-level classification rule bundle (persisted via existing route classification-rules API). */
+export type WizardRouteClassificationRuleDraft = {
+  key: string
+  name: string
+  sensitivityClass: WizardSensitivityClass
+  classificationLevel: WizardClassificationLevel
+  enabled: boolean
+}
+
+export type WizardRouteClassificationOverrideState = {
+  rules: WizardRouteClassificationRuleDraft[]
 }
 
 export type WizardRouteProcessingOverrides = {
   transform?: WizardRouteTransformOverride
   protection?: WizardRouteProtectionOverrideState
+  classification?: WizardRouteClassificationOverrideState
   policy?: WizardRoutePolicyOverride
 }
 
 export type RouteProcessingStatus = 'Inherited' | 'Overridden' | 'Mixed'
+
+/** StreamFailoverRoute draft keyed by this route's primary destination. */
+export type WizardRouteFailoverDraft = {
+  /** Persisted `stream_failover_routes.id` when loaded from the API. */
+  id?: number
+  enabled: boolean
+  secondaryDestinationId: number | null
+}
 
 /** Per-route draft for wizard Destinations step (persists to POST /routes/ on create). */
 export type WizardRouteDraft = {
@@ -671,6 +787,8 @@ export type WizardRouteDraft = {
   inherit: WizardRouteProcessingInherit
   /** Route-specific processing when inherit is unchecked for a concern. */
   overrides?: WizardRouteProcessingOverrides
+  /** Active/Standby failover for this route's destination (existing failover-routes API). */
+  failover?: WizardRouteFailoverDraft
 }
 
 export type WizardDestinationsState = {
@@ -762,6 +880,7 @@ export const INITIAL_CONFIG: WizardConfigState = {
   maxObjectsPerRun: 20,
   remoteDirectory: '',
   filePattern: '*',
+  sqlQuery: '',
   remoteRecursive: false,
   parserType: 'NDJSON',
   maxFilesPerRun: 10,
@@ -812,6 +931,7 @@ export const INITIAL_API_TEST: WizardApiTestState = {
   analysis: null,
   s3ConnectivityPassed: false,
   remoteProbe: null,
+  dbConnectivityPassed: false,
 }
 
 export const INITIAL_DESTINATIONS: WizardDestinationsState = {
@@ -870,11 +990,61 @@ export function buildRouteProtectionOverrideFromGlobal(
   }
 }
 
+export function normalizeWizardRouteFailover(raw: unknown): WizardRouteFailoverDraft | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  const row = raw as { id?: unknown; enabled?: unknown; secondaryDestinationId?: unknown }
+  const secondaryRaw = row.secondaryDestinationId
+  const secondaryDestinationId =
+    typeof secondaryRaw === 'number' && Number.isFinite(secondaryRaw) && secondaryRaw > 0
+      ? secondaryRaw
+      : null
+  const idRaw = row.id
+  const id = typeof idRaw === 'number' && Number.isFinite(idRaw) && idRaw > 0 ? idRaw : undefined
+  return {
+    ...(id != null ? { id } : {}),
+    enabled: row.enabled === true,
+    secondaryDestinationId,
+  }
+}
+
 export function normalizeWizardRouteDraft(
   raw: Partial<WizardRouteDraft>,
-  globalState?: Pick<WizardState, 'mapping' | 'mappingMode' | 'fullEventJsonataExpression' | 'fullEventRegexConfigJson' | 'transformRules' | 'enrichment' | 'unmappedFieldsPolicy' | 'dataProtection'>,
+  globalState?: Pick<
+    WizardState,
+    | 'mapping'
+    | 'mappingMode'
+    | 'fullEventJsonataExpression'
+    | 'fullEventRegexConfigJson'
+    | 'transformRules'
+    | 'enrichment'
+    | 'unmappedFieldsPolicy'
+    | 'dataProtection'
+    | 'dataPolicy'
+  >,
 ): WizardRouteDraft {
   const inherit = normalizeWizardRouteProcessingInherit(raw.inherit)
+  let overrides = raw.overrides
+  if (overrides?.classification) {
+    overrides = {
+      ...overrides,
+      classification: normalizeWizardRouteClassificationOverrideState(overrides.classification),
+    }
+  }
+  if (overrides?.policy) {
+    overrides = {
+      ...overrides,
+      policy: {
+        deliveryBehavior: normalizeWizardPolicyDeliveryBehavior(overrides.policy.deliveryBehavior),
+        ...(overrides.policy.restrictedResponse !== undefined
+          ? { restrictedResponse: normalizeWizardPolicyLevelResponse(overrides.policy.restrictedResponse) }
+          : {}),
+        ...(overrides.policy.confidentialResponse !== undefined
+          ? { confidentialResponse: normalizeWizardPolicyLevelResponse(overrides.policy.confidentialResponse) }
+          : {}),
+      },
+    }
+  }
+  const failover = normalizeWizardRouteFailover(raw.failover)
   const draft: WizardRouteDraft = {
     key: raw.key || newWizardRouteDraftKey(),
     destinationId: raw.destinationId ?? 0,
@@ -885,7 +1055,8 @@ export function normalizeWizardRouteDraft(
         ? { ...raw.rateLimitJson }
         : {},
     inherit,
-    overrides: raw.overrides,
+    overrides,
+    ...(failover ? { failover } : {}),
   }
   if (!inherit.transform && !draft.overrides?.transform && globalState) {
     draft.overrides = {
@@ -897,6 +1068,12 @@ export function normalizeWizardRouteDraft(
     draft.overrides = {
       ...draft.overrides,
       protection: buildRouteProtectionOverrideFromGlobal(globalState.dataProtection),
+    }
+  }
+  if (!inherit.policy && !draft.overrides?.policy) {
+    draft.overrides = {
+      ...draft.overrides,
+      policy: buildRoutePolicyOverrideFromGlobal(globalState?.dataPolicy),
     }
   }
   return draft
@@ -928,6 +1105,7 @@ function routeHasClassificationOverride(
 export function computeWizardRouteProcessingStatuses(
   draft: WizardRouteDraft,
   dataProtection: WizardDataProtectionState,
+  dataPolicy?: Pick<WizardDataPolicyState, 'restrictedResponse' | 'confidentialResponse'>,
 ): WizardRouteProcessingStatuses {
   const inherit = normalizeWizardRouteProcessingInherit(draft.inherit)
   const protectionFieldOverrides = routeHasProtectionFieldOverrides(dataProtection, draft.key)
@@ -953,7 +1131,15 @@ export function computeWizardRouteProcessingStatuses(
     classification = 'Inherited'
   }
 
-  const policy: RouteProcessingStatus = inherit.policy ? 'Inherited' : 'Overridden'
+  let policy: RouteProcessingStatus
+  if (inherit.policy) {
+    policy = 'Inherited'
+  } else if (dataPolicy) {
+    const levelDiffs = wizardRoutePolicyLevelDiffs(dataPolicy, draft.overrides?.policy)
+    policy = levelDiffs.length === 1 ? 'Mixed' : 'Overridden'
+  } else {
+    policy = 'Overridden'
+  }
 
   return { transform, protection, classification, policy }
 }
@@ -970,6 +1156,31 @@ export function globalProtectionConfigured(dataProtection: WizardDataProtectionS
     dataProtection.intents.some(wizardDataProtectionIntentReady) ||
     dataProtection.unknownNormalFieldPolicy !== 'pass_through' ||
     dataProtection.unknownSensitiveFieldPolicy !== 'auto_protect'
+  )
+}
+
+export function globalClassificationConfigured(
+  dataPolicy: Pick<WizardDataPolicyState, 'defaultClassification'>,
+  dataProtection: Pick<WizardDataProtectionState, 'intents' | 'routeClassificationOverrides'>,
+): boolean {
+  const level = String(dataPolicy.defaultClassification || '').trim().toUpperCase()
+  return (
+    (level.length > 0 && level !== 'INTERNAL') ||
+    dataProtection.intents.some(wizardDataProtectionIntentReady) ||
+    dataProtection.routeClassificationOverrides.some((o) => o.enabled)
+  )
+}
+
+export function globalPolicyConfigured(
+  dataPolicy: Pick<WizardDataPolicyState, 'restrictedResponse' | 'confidentialResponse'>,
+  dataProtection: Pick<WizardDataProtectionState, 'intents'>,
+): boolean {
+  return (
+    dataPolicy.restrictedResponse !== 'quarantine' ||
+    dataPolicy.confidentialResponse !== 'continue' ||
+    dataProtection.intents.some(
+      (intent) => wizardDataProtectionIntentReady(intent) && intent.deliveryBehavior !== 'continue',
+    )
   )
 }
 
@@ -1187,15 +1398,17 @@ export function wizardConnectorPatchFromApi(row: ConnectorRead): Partial<WizardC
       ? { ...(lbRaw as Record<string, unknown>) }
       : {}
 
-  const stRaw = String(row.source_type ?? 'HTTP_API_POLLING').toUpperCase()
+  const stRaw = String(row.source_type ?? 'HTTP_API_POLLING').toUpperCase().replace(/\s+/g, '_')
   const st: WizardConnectorState['sourceType'] =
-    stRaw === 'S3_OBJECT_POLLING'
+    stRaw === 'S3_OBJECT_POLLING' || stRaw === 'S3'
       ? 'S3_OBJECT_POLLING'
-      : stRaw === 'REMOTE_FILE_POLLING'
-        ? 'REMOTE_FILE_POLLING'
-        : stRaw === 'WEBHOOK_RECEIVER'
-          ? 'WEBHOOK_RECEIVER'
-          : 'HTTP_API_POLLING'
+      : stRaw === 'DATABASE_QUERY'
+        ? 'DATABASE_QUERY'
+        : stRaw === 'REMOTE_FILE_POLLING' || stRaw === 'REMOTE_FILE'
+          ? 'REMOTE_FILE_POLLING'
+          : stRaw === 'WEBHOOK_RECEIVER' || stRaw === 'WEBHOOK' || stRaw === 'WEBHOOK_PUSH'
+            ? 'WEBHOOK_RECEIVER'
+            : 'HTTP_API_POLLING'
   const baseUrl =
     st === 'S3_OBJECT_POLLING'
       ? String(row.endpoint_url ?? row.base_url ?? row.host ?? '').trim()
@@ -1294,19 +1507,23 @@ export function computeLegacySubstepCompletion(state: WizardState): WizardLegacy
   const connectorReady = state.connector.connectorId != null && state.connector.sourceId != null
   const isS3 = state.connector.sourceType === 'S3_OBJECT_POLLING'
   const isRemote = state.connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = state.connector.sourceType === 'DATABASE_QUERY'
   const isWebhook = state.connector.sourceType === 'WEBHOOK_RECEIVER'
   const streamReady =
     state.stream.name.trim().length > 0 &&
     (isS3 ||
       isRemote ||
+      isDb ||
       isWebhook ||
-      (!isS3 && !isRemote && !isWebhook && state.stream.endpoint.trim().length > 0)) &&
+      (!isS3 && !isRemote && !isDb && !isWebhook && state.stream.endpoint.trim().length > 0)) &&
     (!isS3 || (Number.isFinite(state.stream.maxObjectsPerRun) && state.stream.maxObjectsPerRun >= 1)) &&
-    (!isRemote || state.stream.remoteDirectory.trim().length > 0)
+    (!isRemote || state.stream.remoteDirectory.trim().length > 0) &&
+    (!isDb || state.stream.sqlQuery.trim().length > 0)
   const apiTestRan =
     state.apiTest.status === 'success' &&
     (!isS3 || state.apiTest.s3ConnectivityPassed) &&
-    (!isRemote || state.apiTest.remoteProbe?.ok === true)
+    (!isRemote || state.apiTest.remoteProbe?.ok === true) &&
+    (!isDb || state.apiTest.dbConnectivityPassed)
   const previewErr = state.apiTest.analysis?.previewError
   const recordsGateReady =
     state.apiTest.status === 'success' &&
@@ -1471,8 +1688,23 @@ export function buildSourceAuthPayload(state: WizardState): Record<string, unkno
 }
 
 export function buildStreamConfigPayload(state: WizardState): Record<string, unknown> {
+  const isS3 = state.connector.sourceType === 'S3_OBJECT_POLLING'
   const isRemote = state.connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = state.connector.sourceType === 'DATABASE_QUERY'
   const isWebhook = state.connector.sourceType === 'WEBHOOK_RECEIVER'
+  if (isS3) {
+    return {
+      max_objects_per_run: Math.max(1, Math.floor(Number(state.stream.maxObjectsPerRun) || 20)),
+    }
+  }
+  if (isDb) {
+    const out: Record<string, unknown> = {
+      query: state.stream.sqlQuery.trim(),
+    }
+    const timeout = Math.max(1, Math.floor(Number(state.stream.timeoutSec) || 30))
+    out.query_timeout_seconds = timeout
+    return out
+  }
   if (isRemote) {
     return {
       remote_directory: state.stream.remoteDirectory.trim(),
@@ -1544,9 +1776,11 @@ export function buildStreamConfigPayload(state: WizardState): Record<string, unk
  * Connect-step request body/params.
  */
 export function buildIncrementalTestStreamConfigPayload(state: WizardState): Record<string, unknown> {
+  const isS3 = state.connector.sourceType === 'S3_OBJECT_POLLING'
   const isRemote = state.connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = state.connector.sourceType === 'DATABASE_QUERY'
   const isWebhook = state.connector.sourceType === 'WEBHOOK_RECEIVER'
-  if (isRemote || isWebhook) {
+  if (isS3 || isRemote || isDb || isWebhook) {
     return buildStreamConfigPayload(state)
   }
   const base = buildStreamConfigPayload(state)
@@ -1581,11 +1815,13 @@ export function buildStreamCreatePayload(state: WizardState): {
   if (state.connector.connectorId == null || state.connector.sourceId == null) return null
   const isS3 = state.connector.sourceType === 'S3_OBJECT_POLLING'
   const isRemote = state.connector.sourceType === 'REMOTE_FILE_POLLING'
+  const isDb = state.connector.sourceType === 'DATABASE_QUERY'
   const isWebhook = state.connector.sourceType === 'WEBHOOK_RECEIVER'
   const maxOb = Math.max(1, Math.floor(Number(state.stream.maxObjectsPerRun) || 20))
   let stream_type = 'HTTP_API_POLLING'
   if (isS3) stream_type = 'S3_OBJECT_POLLING'
   else if (isRemote) stream_type = 'REMOTE_FILE_POLLING'
+  else if (isDb) stream_type = 'DATABASE_QUERY'
   else if (isWebhook) stream_type = 'WEBHOOK_RECEIVER'
   const config_json: Record<string, unknown> = isS3
     ? { max_objects_per_run: maxOb }

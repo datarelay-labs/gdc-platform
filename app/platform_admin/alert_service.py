@@ -228,6 +228,88 @@ def _post_webhook(
     return False, last_status, duration_ms, last_error
 
 
+def _email_recipients(settings_row: PlatformAlertSettings) -> list[str]:
+    raw = (settings_row.email_to or "").strip()
+    if not raw:
+        return []
+    parts = raw.replace(";", ",")
+    return [item.strip() for item in parts.split(",") if item.strip()]
+
+
+def _alert_email_subject(event: AlertEvent, *, severity: str) -> str:
+    return f"[Data Relay] {event.alert_type.replace('_', ' ')} ({severity})"
+
+
+def _alert_email_body(event: AlertEvent, *, severity: str, payload: dict[str, Any]) -> str:
+    lines = [
+        f"Alert: {event.alert_type}",
+        f"Severity: {severity}",
+        f"Message: {event.message}",
+        f"Stream ID: {event.stream_id}",
+        f"Route ID: {event.route_id}",
+        f"Destination ID: {event.destination_id}",
+    ]
+    extra = payload.get("extra") if isinstance(payload.get("extra"), dict) else None
+    if extra:
+        for key, value in extra.items():
+            lines.append(f"{key}: {value}")
+    return "\n".join(lines)
+
+
+def _deliver_alert_email(
+    db: Session,
+    *,
+    event: AlertEvent,
+    severity: str,
+    fingerprint: str,
+    payload: dict[str, Any],
+    recipients: list[str],
+) -> None:
+    """Best-effort SMTP send for operational alerts. Never raises."""
+
+    from app.governance_notifications.email_sender import get_email_sender, smtp_delivery_enabled
+
+    if not recipients or not smtp_delivery_enabled():
+        return
+    start = time.monotonic()
+    err: str | None = None
+    delivered = False
+    try:
+        delivered = bool(
+            get_email_sender().send_email(
+                recipients=recipients,
+                subject=_alert_email_subject(event, severity=severity),
+                body=_alert_email_body(event, severity=severity, payload=payload),
+            )
+        )
+        if not delivered:
+            err = "smtp_send_failed"
+    except Exception as exc:
+        delivered = False
+        err = f"{type(exc).__name__}: {exc}"
+        logger.exception(
+            "%s",
+            {"stage": "platform_alert_email_unexpected", "error_type": type(exc).__name__},
+        )
+    duration_ms = int((time.monotonic() - start) * 1000)
+    try:
+        _persist_history(
+            db,
+            event=event,
+            severity=severity,
+            fingerprint=fingerprint,
+            delivery_status="sent" if delivered else "failed",
+            http_status=None,
+            error_message=err,
+            duration_ms=duration_ms,
+            webhook_url_masked=None,
+            payload=payload,
+            channel="email",
+        )
+    except Exception:
+        logger.exception("%s", {"stage": "platform_alert_email_history_failed"})
+
+
 def _persist_history(
     db: Session,
     *,
@@ -240,6 +322,7 @@ def _persist_history(
     duration_ms: int | None,
     webhook_url_masked: str | None,
     payload: dict[str, Any],
+    channel: str = "webhook",
 ) -> PlatformAlertHistory:
     row = PlatformAlertHistory(
         alert_type=event.alert_type,
@@ -250,7 +333,7 @@ def _persist_history(
         destination_id=event.destination_id,
         message=(event.message or "")[:1024],
         fingerprint=fingerprint,
-        channel="webhook",
+        channel=channel,
         delivery_status=delivery_status,
         http_status=http_status,
         error_message=(error_message or None) if error_message else None,
@@ -271,10 +354,11 @@ def deliver_alert(
     *,
     force: bool = False,
 ) -> AlertDeliveryResult:
-    """Deliver a webhook alert and persist the attempt to history.
+    """Deliver a webhook alert (and optional SMTP email) and persist the attempt.
 
     The function does **not** raise.  Cooldown skips and disabled rules return a
     persisted history row tagged ``cooldown_skipped`` / ``rule_disabled``.
+    SMTP failures are recorded on an email history row and never fail the caller.
 
     Args:
         force: bypass rule.enabled and cooldown gating.  Used by the manual
@@ -348,6 +432,14 @@ def deliver_alert(
             webhook_url_masked=None,
             payload=payload,
         )
+        _deliver_alert_email(
+            db,
+            event=event,
+            severity=severity,
+            fingerprint=fingerprint,
+            payload=payload,
+            recipients=_email_recipients(settings_row),
+        )
         return AlertDeliveryResult(
             delivered=False,
             delivery_status="not_configured",
@@ -379,6 +471,14 @@ def deliver_alert(
         duration_ms=duration_ms,
         webhook_url_masked=webhook_url_masked,
         payload=payload,
+    )
+    _deliver_alert_email(
+        db,
+        event=event,
+        severity=severity,
+        fingerprint=fingerprint,
+        payload=payload,
+        recipients=_email_recipients(settings_row),
     )
     return AlertDeliveryResult(
         delivered=delivered,

@@ -280,3 +280,7 @@ def test_route_transform_metrics_emitted(db_session: Session, monkeypatch: pytes
     assert summary.get("route_transform_count") == 1
     assert summary.get("route_transform_duration_ms") is not None
     assert summary.get("route_transform_fallback_count") == 1
+    assert summary.get("route_transform_attempt_count") == 1
+    assert summary.get("route_transform_success_count") == 1
+    assert summary.get("route_transform_failure_count") == 0
+    assert summary.get("route_mapping_operations_applied", 0) >= 1

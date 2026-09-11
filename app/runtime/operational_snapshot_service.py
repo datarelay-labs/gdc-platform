@@ -11,6 +11,7 @@ from app.runtime.operational_snapshot_repository import (
     OperationalSnapshotBulkData,
     PhysicalOperationalRows,
     WindowAggregateRow,
+    load_open_schema_field_drift_counts,
     load_operational_snapshot_bulk_data,
     load_physical_operational_rows,
 )
@@ -155,12 +156,28 @@ def should_flag_checkpoint_stale(stream: OperationalStreamSnapshot) -> bool:
     return cp_at < stream.last_success_at
 
 
+def _attach_open_schema_field_drift_counts(
+    streams: list[OperationalStreamSnapshot],
+    counts: dict[int, int],
+) -> list[OperationalStreamSnapshot]:
+    if not counts:
+        return streams
+    return [
+        stream.model_copy(update={"open_schema_field_drift_count": int(counts.get(stream.stream_id, 0))})
+        for stream in streams
+    ]
+
+
 def build_operational_snapshot(db: Session) -> OperationalSnapshotResponse:
+    open_drift_counts = load_open_schema_field_drift_counts(db)
     physical = load_physical_operational_rows(db)
     if physical is not None:
-        return _assemble_snapshot_from_physical(physical)
-    bulk = load_operational_snapshot_bulk_data(db)
-    return _assemble_snapshot(bulk)
+        snapshot = _assemble_snapshot_from_physical(physical)
+    else:
+        snapshot = _assemble_snapshot(load_operational_snapshot_bulk_data(db))
+    return snapshot.model_copy(
+        update={"streams": _attach_open_schema_field_drift_counts(snapshot.streams, open_drift_counts)}
+    )
 
 
 def _assemble_snapshot_from_physical(rows: PhysicalOperationalRows) -> OperationalSnapshotResponse:

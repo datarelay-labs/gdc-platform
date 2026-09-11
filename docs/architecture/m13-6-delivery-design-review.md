@@ -1,6 +1,9 @@
 # M13.6 Route Runtime Delivery — Design Review
 
-**Status:** Design review only — no code, implementation, or migrations  
+**Status:** SUPERSEDED (historical design review)  
+**Superseded By:** [`specs/096-route-runtime-delivery`](../../specs/096-route-runtime-delivery/spec.md)
+
+Design review only — no code, implementation, or migrations  
 **Date:** 2026-06-16  
 **Scope:** Spec 096 validation before M13.6 implementation  
 **Inputs:**

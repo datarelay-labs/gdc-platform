@@ -9,8 +9,19 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.protection.models import POLICY_ACTION_AUDIT_ONLY, POLICY_ACTION_QUARANTINE, StreamPolicyRule
-from app.protection.policy_engine import PolicyBatchResult, evaluate_injected_policy_batch, evaluate_batch
+from app.protection.models import (
+    POLICY_ACTION_AUDIT_ONLY,
+    POLICY_ACTION_BLOCK,
+    POLICY_ACTION_QUARANTINE,
+    POLICY_ACTION_REQUIRE_REVIEW,
+    StreamPolicyRule,
+)
+from app.protection.policy_engine import (
+    PolicyBatchResult,
+    PolicyEvaluationItem,
+    evaluate_injected_policy_batch,
+    evaluate_batch,
+)
 from app.quarantine.models import StreamQuarantineEvent
 from app.route_policy.config import RoutePolicyConfig
 from app.route_policy.decision import delivery_allowed_for_decision, merge_route_policy_decision
@@ -141,6 +152,87 @@ def test_resolve_route_policy_route_override_rules() -> None:
     )
     assert config.resolution.persisted_source == "route"
     assert config.rules[0].action_type == POLICY_ACTION_QUARANTINE
+
+
+def test_resolve_route_policy_partial_classification_overlay() -> None:
+    stream_rules = [
+        StreamPolicyRule(
+            stream_id=1,
+            name="restricted",
+            enabled=True,
+            condition_json={"classification_level": "RESTRICTED"},
+            action_type=POLICY_ACTION_QUARANTINE,
+        ),
+        StreamPolicyRule(
+            stream_id=1,
+            name="confidential",
+            enabled=True,
+            condition_json={"classification_level": "CONFIDENTIAL"},
+            action_type=POLICY_ACTION_AUDIT_ONLY,
+        ),
+    ]
+    route_rules = [
+        RoutePolicyRule(
+            route_id=10,
+            name="confidential-block",
+            enabled=True,
+            condition_json={"classification_level": "CONFIDENTIAL"},
+            action_type=POLICY_ACTION_BLOCK,
+        ),
+    ]
+    config = resolve_route_policy_config(
+        route_id=10,
+        stream_id=1,
+        route_policy_rules=route_rules,
+        stream_policy_rules=stream_rules,
+    )
+    by_level = {
+        str((rule.condition_json or {}).get("classification_level")): rule.action_type
+        for rule in config.rules
+    }
+    assert by_level["RESTRICTED"] == POLICY_ACTION_QUARANTINE
+    assert by_level["CONFIDENTIAL"] == POLICY_ACTION_BLOCK
+    assert len(config.rules) == 2
+
+
+def test_merge_decision_policy_engine_block() -> None:
+    batch = PolicyBatchResult(
+        evaluations=[
+            PolicyEvaluationItem(
+                policy_id=1,
+                matched=True,
+                policy_name="confidential-block",
+                action_type=POLICY_ACTION_BLOCK,
+            ),
+        ],
+        matched_policies=[],
+        policy_count=1,
+        matched_policy_count=1,
+    )
+    config = resolve_route_policy_config(route_id=1, stream_id=1)
+    decision, reason = merge_route_policy_decision(batch, config)
+    assert decision == "block"
+    assert "matched_policy_block" in reason
+
+
+def test_merge_decision_policy_engine_require_review() -> None:
+    batch = PolicyBatchResult(
+        evaluations=[
+            PolicyEvaluationItem(
+                policy_id=1,
+                matched=True,
+                policy_name="confidential-review",
+                action_type=POLICY_ACTION_REQUIRE_REVIEW,
+            ),
+        ],
+        matched_policies=[],
+        policy_count=1,
+        matched_policy_count=1,
+    )
+    config = resolve_route_policy_config(route_id=1, stream_id=1)
+    decision, reason = merge_route_policy_decision(batch, config)
+    assert decision == "require_review"
+    assert "matched_policy_require_review" in reason
 
 
 def test_resolve_route_policy_delivery_behavior_override() -> None:

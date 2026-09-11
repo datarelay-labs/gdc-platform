@@ -1,29 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import { suggestUnionFieldTypeLabel } from './unionFieldSuggestedType'
+import type { UnionSchemaField } from './unionSchema'
+
+function field(partial: Partial<UnionSchemaField> & Pick<UnionSchemaField, 'field_path'>): UnionSchemaField {
+  return {
+    field_type: 'string',
+    occurrence_count: 1,
+    sample_values: [],
+    ...partial,
+  }
+}
 
 describe('suggestUnionFieldTypeLabel', () => {
-  it('maps email fields to Likely Email', () => {
-    expect(suggestUnionFieldTypeLabel('$.email')).toBe('Likely Email')
-    expect(suggestUnionFieldTypeLabel('$.user.e_mail')).toBe('Likely Email')
+  it('maps backend email suggestions to Likely Email', () => {
+    expect(
+      suggestUnionFieldTypeLabel(
+        field({ field_path: '$.email', suggested_sensitive_type: 'Likely Email', sensitivity_class: 'pii' }),
+      ),
+    ).toBe('Likely Email')
   })
 
-  it('maps api key fields to Likely API Key', () => {
-    expect(suggestUnionFieldTypeLabel('$.api_key')).toBe('Likely API Key')
-    expect(suggestUnionFieldTypeLabel('$.apikey')).toBe('Likely API Key')
+  it('maps backend api key suggestions to Likely API Key', () => {
+    expect(
+      suggestUnionFieldTypeLabel(
+        field({ field_path: '$.api_key', suggested_sensitive_type: 'Likely API Key', sensitivity_class: 'secret' }),
+      ),
+    ).toBe('Likely API Key')
   })
 
-  it('maps credit_card fields to Likely Credit Card', () => {
-    expect(suggestUnionFieldTypeLabel('$.credit_card')).toBe('Likely Credit Card')
-    expect(suggestUnionFieldTypeLabel('$.billing.card_number')).toBe('Likely Credit Card')
+  it('maps backend credit card suggestions to Likely Credit Card', () => {
+    expect(
+      suggestUnionFieldTypeLabel(
+        field({
+          field_path: '$.credit_card',
+          suggested_sensitive_type: 'Likely Credit Card',
+          sensitivity_class: 'pii',
+        }),
+      ),
+    ).toBe('Likely Credit Card')
   })
 
-  it('maps email sample values to Likely Email', () => {
-    expect(suggestUnionFieldTypeLabel('$.contact', ['user@example.com'])).toBe('Likely Email')
-  })
-
-  it('returns em dash for other fields', () => {
-    expect(suggestUnionFieldTypeLabel('$.user')).toBe('—')
-    expect(suggestUnionFieldTypeLabel('$.status')).toBe('—')
-    expect(suggestUnionFieldTypeLabel('$.id', ['12345'], 'string')).toBe('—')
+  it('returns em dash when backend suggestion is absent', () => {
+    expect(suggestUnionFieldTypeLabel(field({ field_path: '$.email', sample_values: ['a@b.c'] }))).toBe('—')
+    expect(suggestUnionFieldTypeLabel(field({ field_path: '$.status' }))).toBe('—')
+    expect(suggestUnionFieldTypeLabel(field({ field_path: '$.id', sample_values: ['12345'] }))).toBe('—')
   })
 })
