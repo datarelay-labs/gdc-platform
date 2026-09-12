@@ -7,7 +7,7 @@ import type {
   OperationalSnapshotResponse,
   OperationalStreamSnapshot,
 } from '../../api/operationalSnapshot'
-import { formatThroughputEps } from '../../lib/observability-format'
+import { formatOperationalPercent, formatThroughputEps } from '../../lib/observability-format'
 import type { StatusTone } from '../shell/status-badge'
 
 export type StreamHealthTab = 'all' | 'healthy' | 'degraded' | 'error' | 'idle' | 'disabled'
@@ -61,8 +61,7 @@ export function formatShortTs(iso: string | null | undefined): string {
 }
 
 export function formatPercent(value: number | null | undefined): string {
-  if (value == null || !Number.isFinite(value)) return '—'
-  return `${Math.round(value * 100) / 100}%`
+  return formatOperationalPercent(value)
 }
 
 export function formatLatencyMs(value: number | null | undefined): string {

@@ -4,6 +4,7 @@
  */
 
 import { AlertTriangle, CheckCircle2, Server, Activity, Bell } from 'lucide-react'
+import { formatOperationalCount, formatOperationalPercent } from '../../lib/observability-format'
 import type { DestinationOverviewRow } from './use-destinations-overview-data'
 import { SemiGauge, DonutChart, extractCapacityConfig } from './destination-mini-charts'
 
@@ -198,13 +199,13 @@ export function DestinationsKpiStrip({ kpi, loading }: DestinationsKpiStripProps
                 <div className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-400" />
                   <span className="text-[11px] text-slate-300">
-                    Success <span className="tabular-nums font-semibold">{kpi.overallSuccessRatePct.toFixed(1)}%</span>
+                    Success <span className="tabular-nums font-semibold">{formatOperationalPercent(kpi.overallSuccessRatePct)}</span>
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-red-400" />
                   <span className="text-[11px] text-slate-400">
-                    Failed <span className="tabular-nums">{(100 - kpi.overallSuccessRatePct).toFixed(1)}%</span>
+                    Failed <span className="tabular-nums">{formatOperationalPercent(100 - kpi.overallSuccessRatePct)}</span>
                   </span>
                 </div>
               </>
@@ -212,7 +213,7 @@ export function DestinationsKpiStrip({ kpi, loading }: DestinationsKpiStripProps
               <span className="text-[12px] text-slate-500">No delivery data</span>
             )}
             <div className="text-[10px] text-slate-500">
-              Events: <span className="tabular-nums text-slate-400">{kpi.totalDeliveredEvents.toLocaleString()}</span>
+              Events: <span className="tabular-nums text-slate-400">{formatOperationalCount(kpi.totalDeliveredEvents)}</span>
             </div>
           </div>
         </div>

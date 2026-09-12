@@ -21,18 +21,16 @@ import { ConnectorRowActions } from './connector-row-actions'
 import { ConnectorRowExpand } from './connector-row-expand'
 import { ConnectorStreamsPopover } from './connector-streams-popover'
 import { CurlImportPanel, PostmanImportPanel } from './http-import-panel'
+import { formatOperationalCount, formatThroughputEps } from '../../lib/observability-format'
 
 function formatEventsToday(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
+  return formatOperationalCount(n, { compact: true })
 }
 
 function formatEps(eps: number): string {
+  if (!Number.isFinite(eps)) return '0'
   if (eps >= 1000) return `${(eps / 1000).toFixed(1)}K`
-  if (eps >= 1) return eps.toFixed(0)
-  if (eps > 0) return eps.toFixed(2)
-  return '0'
+  return formatThroughputEps(eps)
 }
 
 export function ConnectorsOverviewPage() {

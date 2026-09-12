@@ -10,7 +10,7 @@ import type {
 import type { StreamRuntimeStatus } from '../api/streamRows'
 import type { StatusTone } from '../components/shell/status-badge'
 import { isCheckpointStaleLagMessage } from './stream-console-issue-causes'
-import { formatThroughputEps } from './observability-format'
+import { formatOperationalPercent, formatThroughputEps } from './observability-format'
 import { formatTimestampWithResolvedTimezone } from './platform-timestamps'
 
 export type OperationalUiHealthLabel = 'Healthy' | 'Warning' | 'Error' | 'Idle' | 'Disabled' | 'Critical'
@@ -112,8 +112,7 @@ export function formatOperationalEps(eps: number | null | undefined, suffix = '/
 }
 
 export function formatOperationalSuccessRate(pct: number | null | undefined): string {
-  if (pct == null || !Number.isFinite(pct)) return '—'
-  return `${Math.round(pct * 100) / 100}%`
+  return formatOperationalPercent(pct)
 }
 
 export function formatOperationalFailureRate(pct: number | null | undefined): string {

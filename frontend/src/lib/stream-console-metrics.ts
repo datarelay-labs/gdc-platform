@@ -13,7 +13,7 @@ import {
   worstOperationalSeverity,
   type StreamOperationalSeverity,
 } from './stream-operational-status'
-import { formatThroughputEps } from './observability-format'
+import { formatOperationalPercentKnown, formatThroughputEps } from './observability-format'
 import { parseApiTimestampMs, formatPlatformRelative as formatRelativeShort } from './platform-timestamps'
 
 export { parseApiTimestampMs, formatRelativeShort } from './platform-timestamps'
@@ -115,8 +115,7 @@ export function groupHealthAccentClass(status: StreamRuntimeStatus): string {
 }
 
 export function formatSuccessRate(pct: number, known: boolean): string {
-  if (!known) return '—'
-  return `${pct.toFixed(pct >= 100 ? 0 : 2)}%`
+  return formatOperationalPercentKnown(pct, known)
 }
 
 export type StreamRateRow = {
@@ -275,7 +274,7 @@ export function aggregateGroupRates(rows: readonly StreamRateRow[]): AggregateGr
   return {
     ingestLabel: hasAny ? formatIngestEpsLabel(totalIngestEps) : '—',
     deliveryLabel: hasDelivery ? formatIngestEpsLabel(totalDeliveredEps) : '—',
-    successLabel: successPct != null ? `${successPct.toFixed(2)}%` : '—',
+    successLabel: successPct != null ? formatSuccessRate(successPct, true) : '—',
     successPct,
     totalEvents,
     totalDelivered,

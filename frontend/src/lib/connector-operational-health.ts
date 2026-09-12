@@ -1,5 +1,6 @@
 import type { ConnectorRead } from '../api/gdcConnectors'
 import type { AuthHealthCheckInterval, ConnectorOperationsRow, ConnectorStreamOpsSummary } from '../api/gdcConnectorsOperations'
+import { formatThroughputEps } from './observability-format'
 
 export type ConnectorHealthLabel = 'Healthy' | 'Warning' | 'Critical' | 'Stopped'
 
@@ -72,11 +73,9 @@ export function sortConnectorStreamsProblemFirst(
 }
 
 export function formatStreamOpsEps(events1h: number): string {
-  const eps = events1h / 3600
+  const eps = Number.isFinite(events1h) && events1h > 0 ? events1h / 3600 : 0
   if (eps >= 1000) return `${(eps / 1000).toFixed(1)}K`
-  if (eps >= 1) return eps.toFixed(0)
-  if (eps > 0) return eps.toFixed(2)
-  return '0'
+  return formatThroughputEps(eps)
 }
 
 function isConnectorStopped(connector: ConnectorRead): boolean {

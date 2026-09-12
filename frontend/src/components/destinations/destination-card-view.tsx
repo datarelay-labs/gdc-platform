@@ -5,6 +5,7 @@
 
 import { MoreHorizontal } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { formatOperationalRate } from '../../lib/observability-format'
 import type { DestinationOverviewRow } from './use-destinations-overview-data'
 import { SemiGauge, DonutChart, HealthBadge, extractCapacityConfig } from './destination-mini-charts'
 
@@ -27,9 +28,7 @@ function typeLabel(t: string): string {
 }
 
 function formatEps(v: number | null): string {
-  if (v == null) return '—'
-  if (v === 0) return '0'
-  return v < 10 ? v.toFixed(2) : v.toFixed(1)
+  return formatOperationalRate(v)
 }
 
 function DestinationCard({

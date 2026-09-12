@@ -4,6 +4,7 @@
  */
 
 import { cn } from '../../lib/utils'
+import { formatOperationalPercent } from '../../lib/observability-format'
 
 // ─── Capacity config types and helpers ────────────────────────────────────────
 
@@ -133,7 +134,7 @@ export function SemiGauge({ pct, size = 80, strokeWidth = 8, className, showLabe
   const color = capacityColor(pct, thresholds)
   const trackColor = 'rgba(100,116,139,0.18)'
 
-  const displayLabel = label ?? (pct != null ? `${Math.round(pct)}%` : '—')
+  const displayLabel = label ?? (pct != null ? formatOperationalPercent(pct) : '—')
 
   return (
     <svg
@@ -216,7 +217,7 @@ export function LargeSemiGauge({ pct, label, sublabel, thresholds = DEFAULT_CAPA
 
   const color = capacityColor(pct, thresholds)
   const trackColor = 'rgba(100,116,139,0.18)'
-  const displayLabel = label ?? (pct != null ? `${Math.round(pct)}%` : '—')
+  const displayLabel = label ?? (pct != null ? formatOperationalPercent(pct) : '—')
 
   return (
     <div className="flex flex-col items-center">
@@ -378,7 +379,7 @@ export function DonutChart({ successPct, size = 56, strokeWidth = 7, className, 
   const color = successRateColor(successPct)
   const trackColor = successPct != null ? '#ef444455' : 'rgba(100,116,139,0.18)'
 
-  const displayLabel = successPct != null ? `${Math.round(successPct)}%` : '—'
+  const displayLabel = successPct != null ? formatOperationalPercent(successPct) : '—'
 
   return (
     <svg

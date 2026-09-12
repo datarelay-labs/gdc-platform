@@ -8,7 +8,7 @@ import {
   runtimeOverviewPath,
   streamRuntimePath,
 } from '../../config/nav-paths'
-import { formatThroughputEps } from '../../lib/observability-format'
+import { formatOperationalPercent, formatThroughputEps } from '../../lib/observability-format'
 import { cn } from '../../lib/utils'
 import { opTd, opTr } from '../dashboard/widgets/operational-table-styles'
 import { StatusBadge } from '../shell/status-badge'
@@ -65,8 +65,7 @@ function DeliveryMeter({ pct }: { pct: number }) {
   const tone =
     pct >= 99 ? 'bg-emerald-500' : pct >= 90 ? 'bg-amber-500' : pct <= 0 ? 'bg-slate-300 dark:bg-slate-600' : 'bg-red-500'
   const width = `${Math.min(100, Math.max(0, pct))}%`
-  const label =
-    pct >= 100 ? `${pct.toFixed(0)}%` : pct <= 0 ? '0%' : `${Math.round(pct * 100) / 100}%`
+  const label = formatOperationalPercent(pct)
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <p className="text-[12px] font-semibold tabular-nums text-slate-800 dark:text-slate-100">{label}</p>

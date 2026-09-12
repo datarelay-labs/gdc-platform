@@ -25,6 +25,7 @@ import { cn } from '../../lib/utils'
 import { logsPath, streamEditPath, streamRuntimePath } from '../../config/nav-paths'
 import type { StreamConsoleRow } from '../../api/streamRows'
 import type { OperationalProblem, OperationalRouteSnapshot } from '../../api/operationalSnapshot'
+import { formatOperationalPercent, formatThroughputEps } from '../../lib/observability-format'
 import { formatRelativeShort, streamSuccessRateDisplay } from '../../lib/stream-console-metrics'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -102,12 +103,11 @@ function streamStatusLabel(row: StreamConsoleRow): string {
 function formatEps(eps: number | null | undefined): string {
   if (eps == null || !Number.isFinite(eps) || eps <= 0) return '—'
   if (eps >= 1000) return `${(eps / 1000).toFixed(1)}K /s`
-  return `${eps.toFixed(1)} /s`
+  return `${formatThroughputEps(eps)} /s`
 }
 
 function formatSuccessPct(pct: number | null | undefined): string {
-  if (pct == null || !Number.isFinite(pct)) return '—'
-  return `${pct.toFixed(pct >= 100 ? 0 : 1)}%`
+  return formatOperationalPercent(pct)
 }
 
 function truncate(str: string | null | undefined, max = 60): string {
@@ -152,7 +152,7 @@ function OverviewTab({
   streamRoutes: OperationalRouteSnapshot[]
 }) {
   const successDisplay = streamSuccessRateDisplay(stream)
-  const successLabel = successDisplay.known ? `${(successDisplay.pct ?? 0).toFixed(1)}%` : '—'
+  const successLabel = successDisplay.known ? formatOperationalPercent(successDisplay.pct) : '—'
   const epsLabel = formatEps(stream.eps5m != null && stream.eps5m > 0 ? stream.eps5m : stream.ingestEps > 0 ? stream.ingestEps : null)
   const checkpointTime = stream.checkpointUpdatedAt && stream.checkpointUpdatedAt !== '—'
     ? formatRelativeShort(stream.checkpointUpdatedAt)
@@ -234,8 +234,8 @@ function OverviewTab({
               const statusLabel = routeStatusLabel(route)
               const toneCls = routeStatusToneClass(route)
               const eps = route.delivered_eps_1m ?? 0
-              const epsLabel = eps >= 1000 ? `${(eps / 1000).toFixed(1)}K/s` : eps > 0 ? `${eps.toFixed(2)}/s` : '—'
-              const successPct = route.success_rate_5m != null ? `${(route.success_rate_5m * 100).toFixed(1)}%` : '—'
+              const epsLabel = formatEps(eps)
+              const successPct = formatOperationalPercent(route.success_rate_5m)
               return (
                 <div key={route.route_id} className="rounded-lg border border-slate-200/60 bg-slate-50/50 px-3 py-2 dark:border-gdc-border dark:bg-gdc-elevated/20">
                   <div className="flex items-center justify-between gap-2">
@@ -404,7 +404,7 @@ function DestinationsTab({ streamRoutes }: { streamRoutes: OperationalRouteSnaps
           <tbody>
             {streamRoutes.map((route) => {
               const destName = route.destination_name ?? (route.destination_id != null ? `Destination #${route.destination_id}` : `Route #${route.route_id}`)
-              const retryLabel = route.retry_rate_5m > 0 ? `${route.retry_rate_5m.toFixed(1)}%` : '—'
+              const retryLabel = route.retry_rate_5m > 0 ? formatOperationalPercent(route.retry_rate_5m) : '—'
               const lastDelivery = route.last_success_at ? formatRelativeShort(route.last_success_at) : '—'
               const lastErr = truncate(route.last_error_message, 28)
               return (

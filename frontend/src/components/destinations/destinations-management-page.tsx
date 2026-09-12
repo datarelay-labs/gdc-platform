@@ -28,6 +28,7 @@ import {
   type DestinationTestResult,
 } from '../../api/gdcDestinations'
 import { useDestinationsOverviewData, type DestinationOverviewRow } from './use-destinations-overview-data'
+import { formatOperationalRate } from '../../lib/observability-format'
 import type { DestinationUiHealth } from './destination-runtime-metrics'
 import type { StreamsMetricsWindow } from '../../constants/streamConsoleFilters'
 import { streamsTimeRangeLabel } from '../../constants/streamConsoleFilters'
@@ -218,10 +219,7 @@ function formFromRow(row: DestinationListItem): FormState {
 
 
 function formatEps(eps: number | null): string {
-  if (eps == null || !Number.isFinite(eps)) return '—'
-  if (eps === 0) return '0'
-  if (eps < 0.01) return '<0.01'
-  return eps < 10 ? eps.toFixed(2) : eps.toFixed(1)
+  return formatOperationalRate(eps)
 }
 
 
@@ -495,9 +493,7 @@ function CapacityRecommendationCard({
     : 'text-emerald-400'
 
   function fmtEps(v: number | null): string {
-    if (v == null) return '—'
-    if (v === 0) return '0'
-    return v < 10 ? v.toFixed(2) : v.toFixed(1)
+    return formatOperationalRate(v)
   }
 
   return (

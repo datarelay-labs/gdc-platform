@@ -1,5 +1,6 @@
 import { Activity, Clock, Send, TrendingUp } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { formatOperationalPercent } from '../../lib/observability-format'
 import { eventsPerSecFromWindow, formatEventsPerSecRate } from '../../lib/stream-console-metrics'
 import type { StreamRuntimeStatus } from '../../api/streamRows'
 import type { StreamRuntimeMetricsResponse } from '../../api/types/gdcApi'
@@ -116,7 +117,7 @@ export function StreamMonitoringStatusStrip({
     hasDeliveryOutcomes || deliveredHour > 0
       ? `${formatEventsPerSecRate(deliveredHour, winSec).replace(' /s', '')} events/sec`
       : '0 events/sec'
-  const successLabel = successRate != null ? `${successRate.toFixed(2)}%` : '—'
+  const successLabel = successRate != null ? formatOperationalPercent(successRate) : '—'
   const lastEvent = lastEventRelative ?? '—'
   const lastEventAt = runtimeMetrics?.stream.last_run_at ?? lastErrorAt ?? null
   const lastEventSub = lastEventAt ? lastEventAt.slice(0, 19).replace('T', ' ') : null
