@@ -1,6 +1,6 @@
 # Data Relay — Enterprise Data Control Gateway
 
-**Version:** GA v1.0.2 (Source Available)
+**Version:** v1.0.2 · **Commercial Status:** Free Early Access · **Source:** Source Available
 
 Data Relay is a source-available **Enterprise Data Control Gateway**. It collects data from external systems (HTTP API polling, webhook receiver), applies Mapping and Enrichment, runs schema drift detection, sensitive-data detection, protection, classification, and policy enforcement, then delivers events to multiple Destinations with governance, RBAC, and audit controls.
 
@@ -8,7 +8,7 @@ Single source of truth for architecture: [`docs/master-design.md`](docs/master-d
 
 Release documentation: [`docs/release/`](docs/release/) · Documentation hub: [`docs/README.md`](docs/README.md)
 
-> **License — Source Available, not Open Source:** Free for personal use, education/research, evaluation, internal commercial use, internal modification, and customer-owned deployment. Resale, OEM/embedding, white-labeling, commercial redistribution, derivative commercial products, SaaS/MSP offerings of Data Relay functionality, and competing products/services require a separate written commercial license. See [`LICENSE`](LICENSE).
+> **Commercial Status — Free Early Access:** Data Relay Control is currently available free of charge under the **Data Relay Control Early Access License 1.0**. It is Source Available, not Open Source. Personal use, evaluation, internal business use, permitted internal modification, and customer-owned deployments are allowed. Early Access has no SLA and support is best effort. Commercial General Availability is planned with a **perpetual-license** model. Resale, OEM/white-label use, competing commercial products, and SaaS/MSP/hosted offerings require a separate written commercial license. See [`LICENSE`](LICENSE).
 
 ---
 
@@ -260,16 +260,24 @@ cd frontend && npm run validate
 | [`docs/release/release-readiness-audit.md`](docs/release/release-readiness-audit.md) | M20.4 release audit |
 | [`docs/operator-runbook.md`](docs/operator-runbook.md) | Operator procedures |
 | [`CHANGELOG.md`](CHANGELOG.md) | Release history (v1.0.0 – v1.0.2) |
-| [`LICENSE`](LICENSE) | Data Relay Source Available License 1.0 |
+| [`LICENSE`](LICENSE) | Data Relay Control Early Access License 1.0 |
 
 ---
 
 ## License
 
-**Data Relay is source-available, not open source.** It is licensed under the **Data Relay Source Available License 1.0**.
+**Data Relay Control is currently available as Free Early Access.**
 
-Free use includes personal use, education/research, evaluation, internal commercial use, internal modification, and customer-owned deployments. Paid installation, integration, migration, support, or training for a customer-owned deployment is allowed when the customer directly controls and uses the deployment.
+- **Price:** Free during Early Access
+- **Source model:** Source Available
+- **Open Source:** No
+- **Support:** Best effort; no Early Access SLA
+- **Planned Commercial General Availability model:** Perpetual License
 
-Without a separate written commercial license, you may not resell or commercially redistribute Data Relay; OEM/embed or white-label it; use it to create a derivative commercial or competing product/service; or provide Data Relay functionality as SaaS, MSP, hosted, shared, or multi-tenant service.
+Personal use, evaluation/testing, internal business use, permitted internal modification, and customer-owned deployments are allowed during Early Access.
 
-See [`LICENSE`](LICENSE) for the complete terms.
+Without a separate written commercial license, you may not resell or commercially redistribute Data Relay Control; OEM/embed or white-label it; use it to create a derivative commercial or competing product/service; or provide Data Relay Control functionality as SaaS, MSP, hosted, shared, managed, or multi-tenant service.
+
+Future Commercial General Availability releases may require a commercial license and may use different license terms. The Early Access License applies to copies and versions distributed with that license and does not grant rights to future releases.
+
+See [`LICENSE`](LICENSE) for the complete **Data Relay Control Early Access License 1.0** terms.
