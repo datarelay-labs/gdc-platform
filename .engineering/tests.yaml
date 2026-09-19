@@ -1,0 +1,103 @@
+version: 1
+
+paths:
+  "frontend/**":
+    domains: [frontend]
+  "app/**":
+    domains: [backend, runtime]
+  "tests/**":
+    domains: [backend]
+  "alembic/**":
+    domains: [persistence]
+  "e2e/**":
+    domains: [e2e]
+  ".github/workflows/**":
+    domains: [release]
+
+scenarios:
+  - id: FRONTEND-BUILD-AFFECTED
+    name: Frontend affected build
+    level: static
+    domains: [frontend]
+    triggers: [affected, pr]
+    platforms: [linux]
+    command: "cd frontend && npm run build"
+    invariants:
+      - "Touched frontend code compiles and the production bundle builds."
+    origin: "docs/testing/cursor-development-workflow.md"
+    release_gate: true
+
+  - id: BACKEND-FOCUSED-AFFECTED
+    name: Backend focused affected tests
+    level: integration
+    domains: [backend]
+    triggers: [affected, pr]
+    platforms: [linux]
+    command: "./scripts/testing/run-focused-tests.sh"
+    invariants:
+      - "Affected backend behavior passes before broader qualification."
+    origin: "docs/testing/cursor-development-workflow.md"
+    release_gate: true
+
+  - id: RUNTIME-E2E-SMOKE
+    name: Runtime WireMock and PostgreSQL smoke
+    level: e2e
+    domains: [runtime, e2e]
+    triggers: [affected, pr, rc, release]
+    platforms: [linux, docker]
+    command: "./scripts/testing/start-test-stack.sh && ./scripts/testing/run-smoke-tests.sh"
+    invariants:
+      - "Runtime/auth/mapping/delivery/checkpoint changes pass isolated smoke E2E."
+      - "TEST_DATABASE_URL never targets production or shared operator databases."
+    origin: "docs/testing/cursor-development-workflow.md"
+    release_gate: true
+
+  - id: BACKEND-FULL-RC
+    name: Backend full qualification
+    level: integration
+    domains: [backend, persistence]
+    triggers: [rc, release]
+    platforms: [linux]
+    command: "./scripts/test/run-backend-full.sh"
+    invariants:
+      - "Backend and migration behavior passes on the exact candidate source."
+    origin: "README.md"
+    release_gate: true
+
+  - id: FRONTEND-VALIDATE-RC
+    name: Frontend full validation
+    level: component
+    domains: [frontend]
+    triggers: [rc, release]
+    platforms: [linux]
+    command: "cd frontend && npm run validate"
+    invariants:
+      - "Frontend unit tests, build, and lint pass on the exact candidate source."
+    origin: "README.md"
+    release_gate: true
+
+  - id: E2E-FULL-REGRESSION
+    name: Full platform regression
+    level: e2e
+    domains: [runtime, e2e]
+    triggers: [rc, release]
+    platforms: [linux, docker]
+    command: "./scripts/testing/run-full-regression.sh"
+    invariants:
+      - "Full regression runs only after cheaper blocking checks pass."
+    origin: "docs/testing/cursor-development-workflow.md"
+    release_gate: true
+
+  - id: DEV-VALIDATION-EPS-GUARDRAIL
+    name: Dev Validation Lab and visible E2E throughput guardrail
+    level: integration
+    domains: [runtime, e2e]
+    triggers: [affected, pr]
+    platforms: [linux]
+    command: "python3 -m pytest -q tests/test_lab_throughput_config.py tests/test_dev_validation_lab.py tests/test_visible_e2e_seed.py"
+    invariants:
+      - "DEV VALIDATION and DEV E2E streams remain present and runtime-visible."
+      - "Every configured validation/E2E stream remains within the 5-20 EPS target range."
+      - "Validation changes do not silently reduce or inflate configured throughput outside the guardrail."
+    origin: "Data Relay Control project invariant"
+    release_gate: true

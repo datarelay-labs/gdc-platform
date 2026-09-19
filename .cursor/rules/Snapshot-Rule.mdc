@@ -1,9 +1,0 @@
----
-alwaysApply: true
----
-
-All operational pages must use Runtime Snapshot whenever possible.
-
-Do not introduce new API calls when the same information already exists in the snapshot.
-
-Avoid duplicate runtime queries.

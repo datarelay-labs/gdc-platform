@@ -21,7 +21,6 @@ Authoritative product, UX, governance, and guardrail documents for Data Relay. I
 | 7 | Governance Workspace Spec | [`docs/source-of-truth/DATA-RELAY-GOVERNANCE-WORKSPACE-v1.1-FINAL.txt`](../source-of-truth/DATA-RELAY-GOVERNANCE-WORKSPACE-v1.1-FINAL.txt) | 1.1 |
 | 8 | Governance & Transform Policy | [`docs/source-of-truth/DATA-RELAY-GOVERNANCE-AND-TRANSFORM-POLICY-DRAFT-v1.1-FINAL.txt`](../source-of-truth/DATA-RELAY-GOVERNANCE-AND-TRANSFORM-POLICY-DRAFT-v1.1-FINAL.txt) | 1.1 (Draft) |
 | 9 | Union Schema UX Spec | [`docs/source-of-truth/DATA-RELAY-UNION-SCHEMA-UX-SPEC-v1.1-FINAL.txt`](../source-of-truth/DATA-RELAY-UNION-SCHEMA-UX-SPEC-v1.1-FINAL.txt) | 1.1 |
-| 10 | ChatGPT Guardrail | [`docs/source-of-truth/CHATGPT-DATA-RELAY-GUARDRAIL.txt`](../source-of-truth/CHATGPT-DATA-RELAY-GUARDRAIL.txt) | 1.0 |
 
 ---
 
@@ -37,8 +36,6 @@ PRODUCT-CHARTER (1.2.1)          ← top-level product authority
        ├─ GOVERNANCE-WORKSPACE (1.1)
        ├─ GOVERNANCE-AND-TRANSFORM-POLICY (1.1 Draft)
        └─ UNION-SCHEMA-UX-SPEC (1.1)
-
-CHATGPT-DATA-RELAY-GUARDRAIL (1.0)  ← AI assistant guardrail for this project
 ```
 
 ---
@@ -77,6 +74,7 @@ These were valid at a snapshot date. A later charter, spec, or the implemented w
 | [`docs/release/OSS-v1.0-GA-RELEASE-NOTES.md`](../release/OSS-v1.0-GA-RELEASE-NOTES.md) | Historical GA snapshot (2026-06-20); flag OFF / unwired drift KPI | KNOWN-LIMITATIONS + OSS-v1-ARCHITECTURE |
 | [`docs/release/OSS-v1-RC-RELEASE-NOTES.md`](../release/OSS-v1-RC-RELEASE-NOTES.md) | Historical RC snapshot; flag historically defaulted off | KNOWN-LIMITATIONS |
 | [`docs/release/OSS-v1.0-GA-CHECKLIST.md`](../release/OSS-v1.0-GA-CHECKLIST.md) | Historical GA checklist (item 37 flag false) | KNOWN-LIMITATIONS + this index |
+| [`docs/source-of-truth/CHATGPT-DATA-RELAY-GUARDRAIL.txt`](../source-of-truth/CHATGPT-DATA-RELAY-GUARDRAIL.txt) | Pre-GA AI workflow guardrail with transient M20.4.1/RC/GA state assumptions | `AGENTS.md` + Engineering System + current Product Charter/source-of-truth index |
 | Other `docs/architecture/m13-*` design reviews / flag reports | Point-in-time M13 engineering records | specs/091–097 + Runtime code |
 
 Stub files remain under `docs/architecture/` so old links resolve to a SUPERSEDED notice.
